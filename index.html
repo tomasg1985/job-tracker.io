@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="es" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JobTrack · Centro de postulaciones</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;600;700&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l5-5 4 4 7-8"/><path d="M15 8h5v5"/></svg></div>
+      <div><b>JobTrack</b><small>Centro de postulaciones</small></div>
+    </div>
+    <nav class="nav" id="nav">
+      <button data-view="dashboard" class="active"><i data-ic="grid"></i><span>Dashboard</span></button>
+      <button data-view="postulaciones"><i data-ic="send"></i><span>Postulaciones</span><em class="pill" id="navQueue">0</em></button>
+      <button data-view="estadisticas"><i data-ic="chart"></i><span>Estadísticas</span></button>
+      <button data-view="metas"><i data-ic="target"></i><span>Metas</span></button>
+      <button data-view="keywords"><i data-ic="tag"></i><span>Palabras clave</span></button>
+      <button data-view="historial"><i data-ic="clock"></i><span>Historial</span></button>
+      <button data-view="cvs"><i data-ic="file"></i><span>CVs</span></button>
+      <button data-view="ats"><i data-ic="target"></i><span>Simulador ATS</span><em class="pill pill-new">nuevo</em></button>
+      <button data-view="agentes"><i data-ic="spark"></i><span>Agentes IA</span><em class="pill pill-new">10</em></button>
+      <div class="nav-sep">Sistema</div>
+      <button data-view="ds"><i data-ic="grid"></i><span>Sistema de diseño</span></button>
+      <button data-view="ajustes"><i data-ic="gear"></i><span>Ajustes y datos</span></button>
+    </nav>
+    <div class="side-card">
+      <div class="ring-mini" id="sideRing"></div>
+      <div><small>Meta de hoy</small><b id="sideGoalTxt">0 / 200</b></div>
+    </div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+
+  <!-- ============ MAIN ============ -->
+  <div class="main">
+    <header class="topbar">
+      <button class="icon-btn only-mobile" id="menuBtn" aria-label="Menú"><i data-ic="menu"></i></button>
+      <div class="titles"><h1 id="pageTitle">Dashboard</h1><p id="pageSub">Vista general de tu búsqueda</p></div>
+      <div class="search"><i data-ic="search"></i><input id="globalSearch" type="search" placeholder="Buscar ofertas, empresas, palabras clave…" autocomplete="off"><div class="search-results" id="searchResults"></div></div>
+      <button class="btn btn-primary" id="quickAdd"><i data-ic="plus"></i><span>Nueva oferta</span></button>
+      <button class="icon-btn" id="tourBtn" aria-label="Tour guiado" title="Tour guiado"><i data-ic="help"></i></button>
+      <button class="icon-btn" id="themeBtn" aria-label="Cambiar tema"><i data-ic="moon"></i></button>
+      <div class="avatar" title="Tomas">T</div>
+    </header>
+
+    <main class="content">
+
+      <!-- ================= 1. DASHBOARD ================= -->
+      <section class="view active" id="view-dashboard">
+        <div class="demo-banner" id="demoBanner" hidden>
+          <i data-ic="info"></i>
+          <span>Estás viendo <b>datos de demostración</b>. Carga tus CVs y ofertas reales y borra la demo cuando quieras.</span>
+          <button class="btn btn-sm" data-act="clear-demo">Borrar datos demo</button>
+        </div>
+        <div class="kpis" id="kpis"></div>
+        <div class="grid g-dash">
+          <article class="card span-2">
+            <header class="card-h"><div><h3>Postulaciones en el tiempo</h3><p>Últimos 30 días vs. meta diaria</p></div>
+              <div class="seg" id="dashRange"><button data-r="14">14d</button><button data-r="30" class="on">30d</button></div></header>
+            <div class="chart-box h280"><canvas id="chDashLine"></canvas></div>
+          </article>
+          <article class="card">
+            <header class="card-h"><div><h3>Estado de postulaciones</h3><p>Distribución actual</p></div></header>
+            <div class="chart-box h220"><canvas id="chDashStatus"></canvas></div>
+            <div class="legend" id="lgStatus"></div>
+          </article>
+          <article class="card">
+            <header class="card-h"><div><h3>Meta de hoy</h3><p id="dashGoalSub">200 – 300 CVs</p></div></header>
+            <div class="goal-ring" id="dashGoalRing"></div>
+            <div class="goal-actions"><button class="btn btn-sm" data-act="log-sends" data-n="10">+10</button><button class="btn btn-sm" data-act="log-sends" data-n="25">+25</button><button class="btn btn-sm btn-primary" data-act="goto" data-view="postulaciones" data-tab="auto">Auto-postular</button></div>
+          </article>
+          <article class="card">
+            <header class="card-h"><div><h3>Top palabras clave demandadas</h3><p>En tus ofertas cargadas</p></div></header>
+            <div class="chart-box h260"><canvas id="chDashKw"></canvas></div>
+          </article>
+          <article class="card">
+            <header class="card-h"><div><h3>Compatibilidad CV ↔ oferta</h3><p>Zonas de la escala ATS</p></div></header>
+            <div class="chart-box h220"><canvas id="chDashBands"></canvas></div>
+            <div class="legend" id="lgBands"></div>
+          </article>
+          <article class="card span-2">
+            <header class="card-h"><div><h3>Últimas ofertas evaluadas</h3><p>Mejor CV sugerido y % de match</p></div><button class="btn btn-sm btn-ghost" data-act="goto" data-view="historial">Ver historial</button></header>
+            <div class="table-wrap"><table class="tbl" id="dashRecent"></table></div>
+          </article>
+          <article class="card">
+            <header class="card-h"><div><h3>Radar 24 h</h3><p>Pocos postulantes · afines a tus CVs</p></div><button class="btn btn-sm btn-ghost" data-act="goto" data-view="postulaciones" data-tab="radar">Abrir</button></header>
+            <div id="dashRadar" class="mini-feed"></div>
+          </article>
+          <article class="card span-2">
+            <header class="card-h"><div><h3>Insights de los agentes</h3><p>Hallazgos automáticos a partir de tus datos</p></div><button class="btn btn-sm btn-ghost" data-act="goto" data-view="agentes">Consultar agentes</button></header>
+            <div id="dashInsights" class="insights"></div>
+          </article>
+          <article class="card ats-card">
+            <header class="card-h"><div><h3>Realidad del filtrado ATS</h3><p>Por qué importa el match</p></div></header>
+            <div class="ats-stats">
+              <div><b>70–75 %</b><span>de los CVs se descartan antes de que un reclutador los lea</span></div>
+              <div><b>≈ 98 %</b><span>de las empresas Fortune 500 usan ATS</span></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- ================= 2. POSTULACIONES ================= -->
+      <section class="view" id="view-postulaciones">
+        <div class="tabs" id="postTabs">
+          <button data-tab="cargar" class="active"><i data-ic="plus"></i>Cargar oferta</button>
+          <button data-tab="cola"><i data-ic="hourglass"></i>Cola de espera <em class="pill" id="tabQueueCount">0</em></button>
+          <button data-tab="auto"><i data-ic="bolt"></i>Auto-postulación</button>
+          <button data-tab="radar"><i data-ic="radar"></i>Radar</button>
+          <button data-tab="consejos"><i data-ic="bulb"></i>Consejos para el CV</button>
+          <button data-tab="optimizados"><i data-ic="download"></i>CVs optimizados</button>
+        </div>
+
+        <!-- Cargar oferta -->
+        <div class="tabpane active" id="tab-cargar">
+          <div class="grid g-2">
+            <article class="card">
+              <header class="card-h"><div><h3>Pegar oferta laboral</h3><p>Pega la oferta completa: extraemos las palabras clave y calculamos el match contra cada CV</p></div></header>
+              <form id="offerForm" class="form">
+                <div class="row">
+                  <label>Puesto<input name="title" required placeholder="Ej. Backend Developer Node.js"></label>
+                  <label>Empresa<input name="company" required placeholder="Ej. Acme Corp"></label>
+                </div>
+                <div class="row">
+                  <label>Portal<select name="portal"></select></label>
+                  <label>Modalidad<select name="modality"><option>Remoto</option><option>Híbrido</option><option>Presencial</option></select></label>
+                </div>
+                <div class="row">
+                  <label>Ubicación<input name="location" placeholder="Ciudad / País"></label>
+                  <label>Enlace de la oferta<input name="url" type="url" placeholder="https://…"></label>
+                </div>
+                <div class="row">
+                  <label>Postulantes actuales<input name="applicants" type="number" min="0" placeholder="Opcional"></label>
+                  <label>Publicada hace (horas)<input name="hoursAgo" type="number" min="0" step="1" placeholder="Opcional"></label>
+                </div>
+                <label>Descripción completa de la oferta
+                  <textarea name="text" id="offerText" rows="12" required placeholder="Pega aquí responsabilidades, requisitos, herramientas, beneficios…"></textarea>
+                </label>
+                <div class="form-actions">
+                  <button type="submit" class="btn btn-primary"><i data-ic="check"></i>Evaluar y guardar</button>
+                  <button type="button" class="btn" id="offerSample">Cargar ejemplo</button>
+                  <button type="button" class="btn btn-ghost" id="offerClear">Limpiar</button>
+                </div>
+              </form>
+            </article>
+            <article class="card">
+              <header class="card-h"><div><h3>Análisis en vivo</h3><p>Se actualiza mientras pegas la oferta</p></div><span class="chip" id="liveArea">Área: —</span></header>
+              <div id="analysisPreview" class="analysis"><div class="empty"><i data-ic="spark"></i><p>Pega una oferta para ver las palabras clave y el match con tus CVs.</p></div></div>
+            </article>
+          </div>
+        </div>
+
+        <!-- Cola -->
+        <div class="tabpane" id="tab-cola">
+          <article class="card">
+            <header class="card-h"><div><h3>Cola de espera</h3><p>Ofertas evaluadas listas para postular. Pulsa <b>Procesar</b>: la solicitud queda “en espera” mientras se ejecuta y al terminar verás el mensaje de éxito.</p></div></header>
+            <div class="toolbar">
+              <label class="check"><input type="checkbox" id="queueAll"><span>Seleccionar todo</span></label>
+              <span class="muted" id="queueSel">0 seleccionadas</span>
+              <div class="spacer"></div>
+              <button class="btn" data-act="quick-ai-bulk" title="Aplica mejoras seguras al CV de cada oferta y procesa toda la cola"><i data-ic="spark"></i>Mejorar con IA y procesar todas</button>
+              <button class="btn" id="queueProcessSel"><i data-ic="send"></i>Procesar seleccionadas</button>
+              <button class="btn btn-primary" id="queueProcessAll"><i data-ic="bolt"></i>Procesar todas</button>
+            </div>
+            <div class="progress-wrap" id="queueProgress" hidden><div class="progress"><i id="queueBar"></i></div><small id="queueProgTxt"></small></div>
+            <div id="queueList" class="queue"></div>
+          </article>
+        </div>
+
+        <!-- Auto-postulación -->
+        <div class="tabpane" id="tab-auto">
+          <div class="grid g-2">
+            <article class="card">
+              <header class="card-h"><div><h3>Reglas de auto-postulación</h3><p>Se aplican sobre las ofertas cargadas manualmente y evaluadas</p></div></header>
+              <form class="form" id="autoForm">
+                <label>Puntaje mínimo de match: <b id="autoMinTxt">75 %</b>
+                  <input type="range" id="autoMin" min="40" max="100" value="75"></label>
+                <div class="row">
+                  <label>Selección de CV
+                    <select id="autoCvMode">
+                      <option value="best">Mejor match (automático)</option>
+                      <option value="optimized">Solo versiones optimizadas</option>
+                      <option value="fixed">CV fijo…</option>
+                    </select></label>
+                  <label>CV fijo<select id="autoCvFixed"></select></label>
+                </div>
+                <div class="row">
+                  <label>Máximo por ejecución<input type="number" id="autoCap" min="1" max="500" value="50"></label>
+                  <label>Pausa entre envíos (seg)<input type="number" id="autoDelay" min="0" max="30" step="0.5" value="0.6"></label>
+                </div>
+                <div class="row">
+                  <label>Máx. postulantes en la oferta<input type="number" id="autoMaxApp" min="0" placeholder="Sin límite"></label>
+                  <label>Modo de envío
+                    <select id="autoMode">
+                      <option value="record">Registrar en el sistema</option>
+                      <option value="open">Registrar + mostrar enlace para finalizar</option>
+                    </select></label>
+                </div>
+                <label class="check"><input type="checkbox" id="autoCover" checked><span>Generar carta de presentación personalizada</span></label>
+                <label class="check"><input type="checkbox" id="autoSkipStuff" checked><span>Omitir CVs con sospecha de <i>keyword stuffing</i></span></label>
+                <div class="note"><i data-ic="info"></i><span>El sistema prepara y registra cada postulación (CV elegido + carta). Para enviar de forma real a portales que exigen formulario propio se necesita un conector/automatización de navegador; aquí queda listo el paquete de cada envío y, en modo “abrir enlace”, se abre la oferta para finalizarla.</span></div>
+              </form>
+            </article>
+            <article class="card">
+              <header class="card-h"><div><h3>Ejecución</h3><p id="autoElig">0 ofertas elegibles</p></div>
+                <div class="btn-group"><button class="btn btn-primary" id="autoStart"><i data-ic="play"></i>Iniciar</button><button class="btn" id="autoPause" disabled><i data-ic="pause"></i>Pausar</button><button class="btn btn-danger" id="autoStop" disabled><i data-ic="stop"></i>Detener</button></div></header>
+              <div class="progress-wrap"><div class="progress lg"><i id="autoBar"></i></div><small id="autoProgTxt">Listo para iniciar</small></div>
+              <div class="console" id="autoLog" aria-live="polite"></div>
+            </article>
+          </div>
+        </div>
+
+        <!-- Radar -->
+        <div class="tabpane" id="tab-radar">
+          <article class="card">
+            <header class="card-h"><div><h3>Radar de ofertas recientes con poca competencia</h3><p>Rastrea portales y prioriza las publicadas hace poco, con pocos o nulos postulantes y afines a tus CVs</p></div>
+              <div class="btn-group"><button class="btn btn-primary" id="radarLive" title="Lee fuentes públicas reales (Remotive, Arbeitnow)"><i data-ic="radar"></i>Buscar ofertas reales</button><button class="btn btn-primary" id="radarBackend" title="Usa tu servidor local con Playwright (LinkedIn, Indeed, Computrabajo)"><i data-ic="radar"></i>LinkedIn · Indeed · Computrabajo</button><button class="btn" id="radarScan" title="Genera ofertas inventadas para probar el sistema"><i data-ic="search"></i>Simulación</button></div></header>
+            <div class="radar-filters">
+              <label>Publicada hace ≤ <b id="rfHoursTxt">72 h</b><input type="range" id="rfHours" min="1" max="168" value="72"></label>
+              <label>Postulantes ≤ <b id="rfAppTxt">100</b><input type="range" id="rfApp" min="0" max="200" value="100"></label>
+              <label>Relevancia mínima <b id="rfRelTxt">50 %</b><input type="range" id="rfRel" min="0" max="100" value="50"></label>
+              <div class="chips" id="rfPortals"></div>
+            </div>
+            <div class="radar-bk"><label>Puesto / palabras clave<input class="input" id="bkQuery" placeholder="ej. desarrollador backend node"></label><label>Ubicación<input class="input" id="bkLoc" placeholder="ej. Buenos Aires"></label><label>URL del servidor local<input class="input" id="bkUrl" placeholder="http://127.0.0.1:3001"></label></div>
+            <div class="progress-wrap" id="radarProg" hidden><div class="progress"><i id="radarBar"></i></div><small id="radarProgTxt"></small></div>
+            <div class="note"><i data-ic="info"></i><span id="radarNote">Escaneo de demostración con ofertas simuladas. “Conectores en vivo” consulta fuentes públicas con fecha de publicación; esas fuentes no informan el número de postulantes (se marca N/D).</span></div>
+            <div id="radarResults" class="radar-grid"></div>
+          </article>
+        </div>
+
+        <!-- Consejos -->
+        <div class="tabpane" id="tab-consejos">
+          <div class="grid g-2">
+            <article class="card span-2">
+              <header class="card-h"><div><h3>Fórmula XYZ de Google</h3><p>“Logré <b>[X]</b>, medido por <b>[Y]</b>, al hacer <b>[Z]</b>”</p></div></header>
+              <div class="xyz">
+                <div class="xyz-ex bad"><span>Antes</span>“Responsable de mejorar el rendimiento de la API.”</div>
+                <div class="xyz-ex good"><span>Después (XYZ)</span>“Reduje un <mark>45 % la latencia</mark> de la API <mark>(de 820 ms a 450 ms p95)</mark> al <mark>introducir caché con Redis e índices en PostgreSQL</mark>.”</div>
+              </div>
+              <div class="xyz-lab">
+                <label>Laboratorio de bullets — pega una viñeta y la evaluamos
+                  <textarea id="xyzInput" rows="3" placeholder="Ej. Desarrollé endpoints REST para el módulo de pagos"></textarea></label>
+                <div id="xyzOut" class="xyz-out"></div>
+              </div>
+            </article>
+            <article class="card span-2">
+              <header class="card-h"><div><h3>Consejos de corrección por sección del CV</h3><p>Qué ajustar en cada área para superar los filtros ATS, diagnosticado sobre el CV elegido</p></div><select id="auditCv" style="width:auto;min-width:220px"></select></header>
+              <div class="tips-grid" id="auditGrid"></div>
+            </article>
+            <article class="card span-2">
+              <header class="card-h"><div><h3>Guía rápida de mejora</h3><p>Principios que usan reclutadores y sistemas ATS</p></div></header>
+              <div class="tips-grid" id="tipsGrid"></div>
+            </article>
+            <article class="card span-2">
+              <header class="card-h"><div><h3>Verificación de tus CVs</h3><p>Cumplimiento de los consejos por cada CV cargado</p></div></header>
+              <div class="table-wrap"><table class="tbl" id="tipsCompliance"></table></div>
+            </article>
+          </div>
+        </div>
+
+        <!-- CVs optimizados -->
+        <div class="tabpane" id="tab-optimizados">
+          <div class="grid g-2">
+            <article class="card">
+              <header class="card-h"><div><h3>Generar versión optimizada</h3><p>Toma un CV base y lo adapta a una oferta (sin inventar experiencia: tú confirmas cada sugerencia)</p></div></header>
+              <form class="form" id="optForm">
+                <label>CV base<select id="optCv"></select></label>
+                <label>Oferta objetivo<select id="optOffer"></select></label>
+                <button type="submit" class="btn btn-primary"><i data-ic="spark"></i>Analizar y optimizar</button>
+              </form>
+              <div class="note"><i data-ic="info"></i><span>Las versiones optimizadas aparecen aquí para descargar y quedan disponibles como opción de CV en todas las postulaciones.</span></div>
+            </article>
+            <article class="card">
+              <header class="card-h"><div><h3>Formatos de descarga</h3><p>Plantilla Harvard · una columna · sin tablas ni gráficos</p></div></header>
+              <ul class="plain-list">
+                <li><b>PDF</b> — impresión del navegador, texto seleccionable (recomendado ATS)</li>
+                <li><b>Word (.doc)</b> — editable en Word / Google Docs</li>
+                <li><b>TXT</b> — texto plano para formularios de portales</li>
+                <li><b>JSON / HTML</b> — respaldo y portafolio</li>
+              </ul>
+            </article>
+          </div>
+          <div class="section-title">Mis CVs optimizados</div>
+          <div class="cv-grid" id="optGrid"></div>
+        </div>
+      </section>
+
+      <!-- ================= 3. ESTADISTICAS ================= -->
+      <section class="view" id="view-estadisticas">
+        <div class="toolbar">
+          <div class="seg" id="statRange"><button data-r="7">7 días</button><button data-r="30" class="on">30 días</button><button data-r="90">90 días</button></div>
+          <div class="spacer"></div>
+          <button class="btn" data-act="export-csv"><i data-ic="download"></i>Exportar CSV</button>
+        </div>
+        <div class="kpis kpis-4" id="statKpis"></div>
+        <div class="grid g-3">
+          <article class="card span-2"><header class="card-h"><div><h3>Embudo de postulación</h3><p>De evaluada a oferta</p></div></header><div class="chart-box h260"><canvas id="chFunnel"></canvas></div></article>
+          <article class="card"><header class="card-h"><div><h3>Distribución del match</h3><p>Histograma por rangos</p></div></header><div class="chart-box h260"><canvas id="chHist"></canvas></div></article>
+          <article class="card"><header class="card-h"><div><h3>Tasa de respuesta por portal</h3><p>% que responde (entrevista u oferta)</p></div></header><div class="chart-box h260"><canvas id="chPortal"></canvas></div></article>
+          <article class="card"><header class="card-h"><div><h3>Rendimiento por CV</h3><p>Match medio vs. respuestas</p></div></header><div class="chart-box h260"><canvas id="chCv"></canvas></div></article>
+          <article class="card"><header class="card-h"><div><h3>Correlación match → respuesta</h3><p>¿Un mejor match consigue más respuestas?</p></div></header><div class="chart-box h260"><canvas id="chScatter"></canvas></div></article>
+          <article class="card span-2"><header class="card-h"><div><h3>Mapa de calor de envíos</h3><p>Día de la semana × franja horaria</p></div></header><div id="heatmap" class="heatmap"></div></article>
+          <article class="card"><header class="card-h"><div><h3>Brecha de habilidades</h3><p>Demanda en ofertas vs. cobertura en tus CVs</p></div></header><div class="chart-box h260"><canvas id="chGapRadar"></canvas></div></article>
+          <article class="card span-3"><header class="card-h"><div><h3>Lectura analítica</h3><p>Modelo estadístico local: regresión lineal, correlación y pronóstico</p></div></header><div id="statInsights" class="insights"></div></article>
+        </div>
+      </section>
+
+      <!-- ================= 4. METAS ================= -->
+      <section class="view" id="view-metas">
+        <div class="grid g-3">
+          <article class="card">
+            <header class="card-h"><div><h3>Meta diaria</h3><p id="mdSub"></p></div></header>
+            <div class="goal-ring" id="mdRing"></div>
+            <div class="goal-actions"><button class="btn btn-sm" data-act="log-sends" data-n="1">+1</button><button class="btn btn-sm" data-act="log-sends" data-n="10">+10</button><button class="btn btn-sm" data-act="log-sends" data-n="50">+50</button></div>
+          </article>
+          <article class="card">
+            <header class="card-h"><div><h3>Meta semanal</h3><p id="mwSub"></p></div></header>
+            <div class="goal-ring" id="mwRing"></div>
+            <div class="goal-pace" id="mwPace"></div>
+          </article>
+          <article class="card">
+            <header class="card-h"><div><h3>Configurar metas</h3><p>Ajusta el rango objetivo</p></div></header>
+            <form class="form" id="goalForm">
+              <div class="row"><label>Diaria mín.<input type="number" name="dMin" min="1"></label><label>Diaria máx.<input type="number" name="dMax" min="1"></label></div>
+              <div class="row"><label>Semanal mín.<input type="number" name="wMin" min="1"></label><label>Semanal máx.<input type="number" name="wMax" min="1"></label></div>
+              <div class="chips"><button type="button" class="chip btn-chip" data-preset="intenso">200–300 / día</button><button type="button" class="chip btn-chip" data-preset="semanal">200–300 / semana</button></div>
+              <button class="btn btn-primary" type="submit">Guardar metas</button>
+            </form>
+          </article>
+          <article class="card span-2"><header class="card-h"><div><h3>Envíos por día (últimas 4 semanas)</h3><p>Banda objetivo sombreada</p></div></header><div class="chart-box h280"><canvas id="chGoalDays"></canvas></div></article>
+          <article class="card"><header class="card-h"><div><h3>Racha y ritmo</h3><p>Constancia</p></div></header><div id="goalStreak" class="streak"></div></article>
+          <article class="card span-3"><header class="card-h"><div><h3>Calendario de cumplimiento</h3><p>Verde: meta mínima cumplida · Ámbar: parcial · Gris: sin actividad</p></div></header><div id="goalCal" class="cal"></div></article>
+        </div>
+      </section>
+
+      <!-- ================= 5. KEYWORDS ================= -->
+      <section class="view" id="view-keywords">
+        <div class="toolbar">
+          <label class="inline">Oferta<select id="kwOffer"></select></label>
+          <label class="inline">CV<select id="kwCv"></select></label>
+          <div class="spacer"></div>
+          <div class="seg" id="kwFilter"><button data-f="all" class="on">Todas</button><button data-f="ok">Presentes</button><button data-f="miss">Faltantes</button></div>
+        </div>
+        <div class="grid g-kw">
+          <article class="card">
+            <header class="card-h"><div><h3>Compatibilidad</h3><p id="kwTitle">—</p></div></header>
+            <div class="goal-ring" id="kwRing"></div>
+            <div class="band" id="kwBand"></div>
+            <div class="kw-break" id="kwBreak"></div>
+          </article>
+          <article class="card span-2">
+            <header class="card-h"><div><h3>Palabras clave de la oferta</h3><p>Ordenadas por peso · verde = está en tu CV · rojo = falta</p></div><button class="btn btn-sm" id="kwCopy"><i data-ic="copy"></i>Copiar faltantes</button></header>
+            <div id="kwChips" class="kw-chips"></div>
+            <div class="note" id="kwNote" hidden></div>
+          </article>
+          <article class="card span-3">
+            <header class="card-h"><div><h3>Registro de palabras clave por oferta</h3><p>Todas las ofertas con su mejor CV y % de compatibilidad</p></div></header>
+            <div class="table-wrap"><table class="tbl" id="kwTable"></table></div>
+          </article>
+          <article class="card span-3">
+            <header class="card-h"><div><h3>Brecha recurrente</h3><p>Palabras clave que más aparecen en tus ofertas y faltan en tu mejor CV</p></div></header>
+            <div id="kwGap" class="kw-chips"></div>
+          </article>
+        </div>
+      </section>
+
+      <!-- ================= 6. HISTORIAL ================= -->
+      <section class="view" id="view-historial">
+        <article class="card">
+          <div class="toolbar">
+            <div class="input-ic"><i data-ic="search"></i><input id="histSearch" placeholder="Filtrar por puesto, empresa, portal…"></div>
+            <select id="histStatus"><option value="">Todos los estados</option></select>
+            <select id="histPortal"><option value="">Todos los portales</option></select>
+            <div class="spacer"></div>
+            <button class="btn" data-act="export-csv"><i data-ic="download"></i>CSV</button>
+          </div>
+          <div class="table-wrap"><table class="tbl tbl-hover" id="histTable"></table></div>
+        </article>
+      </section>
+
+      <!-- ================= 7. CVS ================= -->
+      <section class="view" id="view-cvs">
+        <div class="grid g-2">
+          <article class="card">
+            <header class="card-h"><div><h3>Subir CV</h3><p>PDF, DOCX, TXT o JSON — se analiza al instante y se proponen mejoras</p></div></header>
+            <label class="drop" id="drop" tabindex="0">
+              <input type="file" id="cvFile" accept=".pdf,.docx,.txt,.md,.json" multiple hidden>
+              <i data-ic="upload"></i><b>Arrastra tus CVs aquí</b><span>o haz clic para seleccionar</span>
+            </label>
+            <div class="form-actions"><button class="btn" id="cvPaste"><i data-ic="file"></i>Pegar texto</button><button class="btn" id="cvBlank"><i data-ic="plus"></i>Crear desde plantilla Harvard</button></div>
+          </article>
+          <article class="card">
+            <header class="card-h"><div><h3>Plantilla Harvard (bullet-point)</h3><p>Modelo de referencia del sistema</p></div><a class="btn btn-sm btn-ghost" target="_blank" rel="noopener" href="https://careerservices.fas.harvard.edu/resources/bullet-point-resume-template/">Ver guía oficial</a></header>
+            <ul class="plain-list">
+              <li><b>Encabezado</b>: nombre, ciudad, email, teléfono, enlaces</li>
+              <li><b>Educación</b> primero: institución, ubicación, título, fechas</li>
+              <li><b>Experiencia</b>: organización, ubicación, puesto, fechas y viñetas con verbo de acción + resultado</li>
+              <li><b>Liderazgo y actividades</b> y <b>Habilidades e intereses</b></li>
+              <li>Una página, una columna, sin tablas ni gráficos</li>
+            </ul>
+          </article>
+        </div>
+        <div class="section-title">Mis CVs <span class="muted" id="cvCount"></span></div>
+        <div class="cv-grid" id="cvGrid"></div>
+      </section>
+
+      <!-- ================= 8. AGENTES ================= -->
+      <section class="view" id="view-ds"><div id="dsBody"></div></section>
+      <section class="view" id="view-ats">
+        <div class="grid g-agents">
+          <article class="card">
+            <header class="card-h"><div><h3>Simulador del ATS</h3><p>Recrea, paso a paso, cómo un ATS recibe, lee, filtra y puntúa tu CV hasta llegar (o no) al reclutador</p></div></header>
+            <form class="form" id="atsForm">
+              <label>CV a simular<select id="atsCv"></select></label>
+              <label>Oferta a la que postulas<select id="atsOffer"></select></label>
+              <button class="btn btn-primary" type="submit"><i data-ic="play"></i>Simular el proceso</button>
+            </form>
+            <div class="note"><i data-ic="info"></i><span>Es una simulación basada en cómo suelen trabajar los ATS (extracción de texto, secciones, campos, filtros eliminatorios, palabras clave y ranking). Cada empresa configura el suyo, así que úsalo como guía para detectar <b>en qué paso fallas</b>.</span></div>
+          </article>
+          <article class="card"><header class="card-h"><div><h3>Recorrido del CV</h3><p id="atsStatus">Elige un CV y una oferta, y pulsa «Simular el proceso»</p></div></header><div id="atsFlow" class="ats-flow"></div></article>
+        </div>
+        <article class="card" id="atsVerdict" hidden style="margin-top:20px"></article>
+      </section>
+      <section class="view" id="view-agentes">
+        <div class="grid g-agents">
+          <article class="card">
+            <header class="card-h"><div><h3>Mesa de agentes</h3><p>Diez especialistas analizan en conjunto tu CV frente a las ofertas cargadas</p></div></header>
+            <form class="form" id="agentForm">
+              <label>CV a analizar<select id="agCv"></select></label>
+              <label>Ofertas de referencia
+                <select id="agOffer"></select></label>
+              <button class="btn btn-primary" type="submit" id="agRun"><i data-ic="spark"></i>Convocar a los agentes</button>
+            </form>
+            <div class="agent-roster" id="agRoster"></div>
+            <div class="note" id="agLlmNote"><i data-ic="info"></i><span>Los agentes usan un motor de análisis local. Puedes añadir una API key en <b>Ajustes</b> para que cada agente redacte con un modelo de lenguaje.</span></div>
+          </article>
+          <article class="card">
+            <header class="card-h"><div><h3>Deliberación</h3><p id="agStatus">Selecciona un CV y convoca a los agentes</p></div><span class="chip" id="agArea">Área: —</span></header>
+            <div class="agent-pipeline" id="agPipe"></div>
+            <div class="agent-thread" id="agThread"><div class="empty"><i data-ic="spark"></i><p>Aquí verás el debate de los agentes y el veredicto final.</p></div></div>
+          </article>
+          <article class="card span-2" id="agConsensus" hidden></article>
+        </div>
+      </section>
+
+      <!-- ================= 9. AJUSTES ================= -->
+      <section class="view" id="view-ajustes">
+        <div class="grid g-2">
+          <article class="card">
+            <header class="card-h"><div><h3>Datos y respaldo</h3><p>Todo se guarda en tu navegador (localStorage)</p></div></header>
+            <div class="btn-stack">
+              <button class="btn" data-act="backup"><i data-ic="download"></i>Descargar respaldo (.json)</button>
+              <label class="btn"><i data-ic="upload"></i>Restaurar respaldo<input type="file" id="restoreFile" accept=".json" hidden></label>
+              <button class="btn" data-act="export-csv"><i data-ic="download"></i>Exportar historial (.csv)</button>
+              <button class="btn" data-act="load-demo"><i data-ic="spark"></i>Cargar datos de demostración</button>
+              <button class="btn btn-danger" data-act="clear-demo"><i data-ic="trash"></i>Borrar datos demo</button>
+              <button class="btn btn-danger" data-act="reset-all"><i data-ic="trash"></i>Borrar TODO</button>
+            </div>
+          </article>
+          <article class="card">
+            <header class="card-h"><div><h3>Agentes con modelo de lenguaje (opcional)</h3><p>La clave se guarda solo en este navegador</p></div></header>
+            <form class="form" id="llmForm">
+              <label>API key de Anthropic<input type="password" id="llmKey" placeholder="sk-ant-…" autocomplete="off"></label>
+              <label>Modelo<input id="llmModel" value="claude-sonnet-5-5"></label>
+              <button class="btn btn-primary" type="submit">Guardar</button>
+            </form>
+            <div class="note"><i data-ic="info"></i><span>Llamada directa desde el navegador a la API de Anthropic. Úsalo solo en tu equipo personal.</span></div>
+          </article>
+          <article class="card span-2">
+            <header class="card-h"><div><h3>Tecnologías de análisis incluidas</h3><p>Todo el procesamiento ocurre en tu navegador</p></div></header>
+            <div class="tech-grid">
+              <div><b>Extracción de keywords</b><span>Tokenización ES/EN, stopwords, n-gramas, TF ponderado por sección, diccionario de habilidades con sinónimos</span></div>
+              <div><b>Match ATS</b><span>Cobertura ponderada + similitud coseno TF-IDF + coincidencia difusa (Levenshtein) + detección de keyword stuffing</span></div>
+              <div><b>Análisis de CV</b><span>Parser de secciones, detección de formato (tablas/columnas), verbos de acción, métricas y fórmula XYZ</span></div>
+              <div><b>Estadística</b><span>Regresión lineal, correlación de Pearson, pronóstico de ritmo y mapa de calor</span></div>
+              <div><b>Visualización</b><span>Chart.js 4</span></div>
+              <div><b>Lectura de archivos</b><span>pdf.js (PDF) y mammoth (DOCX)</span></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ============ MODALES ============ -->
+<div class="modal" id="modal" hidden>
+  <div class="modal-box" id="modalBox" role="dialog" aria-modal="true"></div>
+</div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
