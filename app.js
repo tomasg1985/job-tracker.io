@@ -102,7 +102,7 @@ const DEFAULTS = () => ({
   settings: {
     theme: 'light', llmKey: '', llmModel: 'claude-sonnet-5-5',
     auto: { min: 75, mode: 'best', fixed: '', cap: 50, delay: 0.6, maxApp: '', send: 'record', cover: true, skipStuff: true },
-    radar: { hours: 72, app: 100, rel: 35, v: 2, portals: [], bk: { url: 'http://127.0.0.1:3001', query: '', loc: '' } }
+    radar: { hours: 72, app: 100, rel: 35, v: 2, portals: [], bk: { url: 'http://127.0.0.1:3002', query: '', loc: '' } }
   }
 });
 function loadState() {
@@ -332,16 +332,23 @@ const WEAK_RE = /^(responsable de|encargad[oa] de|a cargo de|particip[eé] en|ay
 const WEAK_MAP = [[/^responsable de /i, 'Lideré '], [/^encargad[oa] de /i, 'Gestioné '], [/^a cargo de /i, 'Gestioné '], [/^particip[eé] en /i, 'Contribuí a '], [/^ayud[eé] a /i, 'Apoyé '], [/^trabaj[eé] en /i, 'Desarrollé '], [/^responsible for /i, 'Led '], [/^worked on /i, 'Built '], [/^helped /i, 'Supported '], [/^assisted /i, 'Supported '], [/^in charge of /i, 'Managed ']];
 const METRIC_RE = /(\d[\d.,]*\s*(%|x\b|k\b|m\b|ms\b|seg|usuarios|users|clientes|customers|horas|hours|d[ií]as|days|semanas|weeks|mil\b|millones|million|requests|req\b|ventas|sales|tickets|endpoints|servicios|services|equipos|people|personas)|[$€£]\s?\d|\b\d{2,}\b)/i;
 const RESULT_RE = /(reduj|reduc|aument|mejor|increment|optimiz|acelera|disminu|elimin|ahorr|logr|gener|lanc|escal|improv|increas|cut|boost|decreas|sav|accelerat|achiev|launch|grew|grow|generat|drove)/i;
+const IMPACT_RE = /(ahorr|tiempo|usuarios|users|clientes|customers|ingresos|revenue|ventas|sales|costos|costs|errores|errors|latencia|latency|conversi|retenci|satisfacci|cobertura|coverage|disponibilidad|uptime|rendimiento|performance|productividad|alcance|requests|peticiones|transacciones|entregas|hitos|cumplimiento)/i;
 const METHOD_RE = /(\b(al|mediante|usando|utilizando|implementando|con|tras|migrando|automatizando|introduciendo|aplicando|a trav[eé]s de|gracias a)\b|\b(by|using|through|via|with|after|leveraging|implementing|introducing)\b)/i;
 function bulletCheck(b) {
   const t = String(b || '').trim(); if (!t) return { empty: true };
   const first = t.split(/\s+/)[0].toLowerCase().replace(/[^a-záéíóúñ]/gi, '');
   const verb = ACTION.has(first) || ACTION.has(norm(first)) || /[éíó]$/.test(first) && first.length > 4 || /^[a-z]{4,}ed$/.test(first);
   const weak = WEAK_RE.test(t);
-  const metric = METRIC_RE.test(t);
-  const xyz = !weak && verb && metric && RESULT_RE.test(t) && METHOD_RE.test(t);
-  const words = t.split(/\s+/).length;
-  return { verb: verb && !weak, weak, metric, xyz, words, long: words > 32, short: words < 6, pronoun: /^(yo|i)\s/i.test(t) };
+  const metric = METRIC_RE.test(t), words = t.split(/\s+/).length;
+  /* XYZ tolerante: X = logro (verbo + objeto), Y = resultado cuantificado, Z = método/herramienta */
+  const numY = metric || /\b\d+[\d.,]*\s+\p{L}{3,}/u.test(t) || /\b(de|from)\s+\d[\d.,]*\s*\p{L}*\s+(a|to)\s+\d/iu.test(t) || /\b(el doble|la mitad|triplic|duplic|cuadruplic|doubled|tripled|halved)/i.test(t);
+  const outcome = RESULT_RE.test(t) || IMPACT_RE.test(t) || /\b(de|from)\s+\d[\d.,]*\s*\p{L}*\s+(a|to)\s+\d/iu.test(t);
+  const tech = typeof extractKeywords === 'function' && (extractKeywords(t, '').keywords || []).some(k => k.cat === 'tool' || k.cat === 'lang');
+  const method = METHOD_RE.test(t) || tech;
+  const X = !weak && verb && words >= 5, Y = numY && (outcome || metric), Z = method && (tech || METHOD_RE.test(t));
+  const xyz = !!(X && Y && Z);
+  const xyzMiss = [!X && 'X', !Y && 'Y', !Z && 'Z'].filter(Boolean);
+  return { verb: verb && !weak, weak, metric, xyz, xyzMiss, hasTech: tech, words, long: words > 32, short: words < 6, pronoun: /^(yo|i)\s/i.test(t) };
 }
 function yearsOf(dates) {
   const ys = (String(dates).match(/(?:19|20)\d{2}/g) || []).map(Number);
@@ -1328,7 +1335,7 @@ function renderRadar() {
   if (!r.v) { r.v = 2; r.hours = Math.max(r.hours, 72); r.app = Math.max(r.app, 100); r.rel = Math.min(r.rel, 35); persist(); } // filtros anteriores (24 h / 5 postulantes / 50 %) ocultaban casi todo
   $('#rfHours').value = r.hours; $('#rfHoursTxt').textContent = radarHoursTxt(r.hours); $('#rfApp').value = r.app; $('#rfAppTxt').textContent = radarAppTxt(r.app); $('#rfRel').value = r.rel; $('#rfRelTxt').textContent = r.rel + ' %';
   $('#rfPortals').innerHTML = RADAR_PORTALS.map(p => `<span class="chip toggle ${r.portals.includes(p) ? 'on' : ''}" data-act="radar-portal" data-p="${p}" role="button" tabindex="0">${p}</span>`).join('');
-  const bk = r.bk || (r.bk = { url: 'http://127.0.0.1:3001', query: '', loc: '' }); $('#bkQuery').value = bk.query; $('#bkLoc').value = bk.loc; $('#bkUrl').value = bk.url;
+  const bk = r.bk || (r.bk = { url: 'http://127.0.0.1:3002', query: '', loc: '' }); $('#bkQuery').value = bk.query; $('#bkLoc').value = bk.loc; $('#bkUrl').value = bk.url;
   drawRadarResults();
 }
 function genRadarDemo(portals) {
@@ -1627,19 +1634,25 @@ function openCvEditor(id, isNew = false) {
   const draft = deep(orig); if (!draft.skills) draft.skills = { technical: '', languages: '', interests: '', certs: '' };
   let tab = 'basics', edOffer = (orig.targetOfferId && getOffer(orig.targetOfferId)) ? orig.targetOfferId : ([...S.offers].sort((a, b) => b.createdAt - a.createdAt)[0] || {}).id || '';
   const F = (l, p, rows, ph = '') => { const v = getP(draft, p) ?? ''; return rows ? `<label>${l}<textarea data-p="${p}" rows="${rows}" spellcheck="true" lang="es" placeholder="${esc(ph)}">${esc(v)}</textarea></label>` : `<label>${l}<input data-p="${p}" value="${esc(v)}" spellcheck="true" lang="es" placeholder="${esc(ph)}"></label>`; };
+  /* Habilidades técnicas: una fila por categoría (se guarda igual: “Categoría: a, b, c” por línea) */
+  let skRows = null;
+  const skParse = str => String(str || '').split('\n').filter(l => l.trim()).map(l => { const m = l.match(/^([^:]{2,32}):\s*(.*)$/); return m ? { c: m[1].trim(), v: m[2].trim() } : { c: '', v: l.trim() }; });
+  const skSave = () => { draft.skills.technical = skRows.filter(r => r.c.trim() || r.v.trim()).map(r => (r.c.trim() ? r.c.trim() + ': ' : '') + r.v.trim()).join('\n'); };
+  const skHtml = () => { if (!skRows) skRows = skParse(draft.skills.technical); if (!skRows.length) skRows = [{ c: '', v: '' }]; return `<div class="sk-box"><div class="an-h" style="margin:0">Habilidades técnicas</div><small class="muted">Una fila por categoría: nombre a la izquierda y las habilidades separadas por coma a la derecha.</small><div class="sk-list">${skRows.map((r, i) => `<div class="sk-row"><input data-sk="c" data-i="${i}" value="${esc(r.c)}" placeholder="Categoría (ej. Backend)" spellcheck="true" lang="es"><input data-sk="v" data-i="${i}" value="${esc(r.v)}" placeholder="Node.js, Express, REST API, JWT" spellcheck="false"><span class="btn-group"><button class="icon-btn" style="width:30px;height:30px" data-ed="sk-up" data-i="${i}" title="Subir">↑</button><button class="icon-btn" style="width:30px;height:30px" data-ed="sk-down" data-i="${i}" title="Bajar">↓</button><button class="icon-btn" style="width:30px;height:30px" data-ed="sk-del" data-i="${i}" title="Quitar categoría">${ico('x', 14)}</button></span></div>`).join('')}</div><button class="btn btn-sm" style="align-self:flex-start" data-ed="sk-add">${ico('plus', 14)}Agregar categoría</button></div>`; };
   const offKw = () => { const o = getOffer(edOffer); return o ? new Set(o.keywords.map(k => k.k)) : new Set(); };
   const hint = b => { if (!String(b).trim()) return ''; const c = bulletCheck(b); const kws = (extractKeywords(b, '').keywords || []).filter(k => k.cat !== 'term' && DICTMAP.has(k.k)).slice(0, 6), ok = offKw(); const tg = kws.map(k => `<span class="tag-chip ${ok.has(k.k) ? 'tg-ok' : 'tg-plain'}" title="${ok.has(k.k) ? 'La oferta seleccionada pide esta etiqueta' : 'Etiqueta detectada en la viñeta'}">${esc(k.k)}</span>`).join(''); const t = (ok, l) => `<span class="badge ${ok ? 'b-ok' : 'b-mute'}">${ok ? '✓' : '○'} ${l}</span>`; return t(c.verb, 'Verbo de acción') + t(c.metric, 'Métrica') + t(c.xyz, 'XYZ') + (c.weak ? '<span class="badge b-bad">Frase débil</span>' : '') + (c.long ? '<span class="badge b-warn">Muy larga</span>' : '') + (tg ? `<span class="tg-wrap">${tg}</span>` : ''); };
-  const bullets = (list, i) => (draft[list][i].bullets || []).map((b, j) => `<div class="bullet-wrap"><div class="bullet-row"><textarea data-p="${list}.${i}.bullets.${j}" rows="3" spellcheck="true" lang="es" placeholder="Verbo de acción + resultado medible (fórmula XYZ)">${esc(b)}</textarea><div class="bm"><button class="btn btn-sm" data-ed="rw" data-list="${list}" data-i="${i}" data-j="${j}" title="Ver cómo reformular esta viñeta con la fórmula XYZ">✎ XYZ</button><button class="icon-btn" style="width:30px;height:30px" data-ed="delb" data-list="${list}" data-i="${i}" data-j="${j}" title="Quitar viñeta">${ico('x', 14)}</button></div></div><div class="bullet-hint">${hint(b)}</div><div class="rw-slot"></div></div>`).join('') + `<button class="btn btn-sm" style="align-self:flex-start" data-ed="addb" data-list="${list}" data-i="${i}">${ico('plus', 14)}Viñeta</button>`;
+  const bullets = (list, i) => (draft[list][i].bullets || []).map((b, j) => `<div class="bullet-wrap"><div class="bullet-row"><textarea data-p="${list}.${i}.bullets.${j}" rows="3" spellcheck="true" lang="es" placeholder="Verbo de acción + resultado medible (fórmula XYZ)">${esc(b)}</textarea><div class="bm"><button class="btn btn-sm" data-ed="rw" data-list="${list}" data-i="${i}" data-j="${j}" title="Ver cómo reformular esta viñeta con la fórmula XYZ">✎ XYZ</button><button class="icon-btn" style="width:30px;height:30px" data-ed="delb" data-list="${list}" data-i="${i}" data-j="${j}" title="Quitar viñeta">${ico('x', 14)}</button></div></div><div class="bullet-hint">${hint(b)}</div><div class="bullet-sug" data-list="${list}" data-i="${i}" data-j="${j}"></div><div class="rw-slot"></div></div>`).join('') + `<button class="btn btn-sm" style="align-self:flex-start" data-ed="addb" data-list="${list}" data-i="${i}">${ico('plus', 14)}Viñeta</button>`;
+  const dateBtn = `<button class="btn btn-sm" style="align-self:flex-start" data-ed="norm-dates" title="Convierte 03/2023 - actual en Mar 2023 – Presente">Normalizar fechas (Mmm AAAA – Presente)</button>`;
   const ctrl = (list, i) => `<span class="btn-group"><button class="btn btn-sm" data-ed="up" data-list="${list}" data-i="${i}" title="Subir">↑</button><button class="btn btn-sm" data-ed="down" data-list="${list}" data-i="${i}" title="Bajar">↓</button><button class="btn btn-sm btn-danger" data-ed="del" data-list="${list}" data-i="${i}">${ico('trash', 14)}</button></span>`;
   const entries = (list, lab, orgL, roleL) => draft[list].map((e, i) => `<div class="ed-item"><div class="ed-item-h"><span>${lab} ${i + 1}</span>${ctrl(list, i)}</div><div class="row">${F(orgL, `${list}.${i}.org`)}${F('Ubicación', `${list}.${i}.location`)}</div><div class="row">${F(roleL, `${list}.${i}.role`)}${F('Fechas (Mmm AAAA – Mmm AAAA)', `${list}.${i}.dates`)}</div><div class="an-h" style="margin:4px 0 0">Viñetas de logros</div>${bullets(list, i)}</div>`).join('') + `<button class="btn" style="align-self:flex-start" data-ed="add" data-list="${list}">${ico('plus', 14)}Agregar ${lab.toLowerCase()}</button>`;
   const panes = {
     basics: () => `<div class="row">${F('Nombre completo', 'basics.name')}${F('Ciudad, País', 'basics.location')}</div><div class="row">${F('Email', 'basics.email')}${F('Teléfono', 'basics.phone')}</div><div class="row">${F('LinkedIn', 'basics.linkedin')}${F('GitHub', 'basics.github')}</div>${F('Portafolio / Web', 'basics.web')}${F('Resumen (opcional, máx. 3 líneas — Harvard puede omitirlo)', 'summary', 5)}${F('Puesto objetivo (aparece en el análisis, no en el CV)', 'targetRole')}`,
-    education: () => draft.education.map((e, i) => `<div class="ed-item"><div class="ed-item-h"><span>Educación ${i + 1}</span>${ctrl('education', i)}</div><div class="row">${F('Institución', `education.${i}.school`)}${F('Ubicación', `education.${i}.location`)}</div><div class="row">${F('Título / programa', `education.${i}.degree`)}${F('Fechas', `education.${i}.dates`)}</div>${F('Detalles (promedio, honores, cursos relevantes)', `education.${i}.details`, 2)}</div>`).join('') + `<button class="btn" style="align-self:flex-start" data-ed="add" data-list="education">${ico('plus', 14)}Agregar educación</button>`,
-    experience: () => entries('experience', 'Experiencia', 'Organización', 'Puesto'),
-    leadership: () => entries('leadership', 'Actividad', 'Organización', 'Rol'),
+    education: () => dateBtn + draft.education.map((e, i) => `<div class="ed-item"><div class="ed-item-h"><span>Educación ${i + 1}</span>${ctrl('education', i)}</div><div class="row">${F('Institución', `education.${i}.school`)}${F('Ubicación', `education.${i}.location`)}</div><div class="row">${F('Título / programa', `education.${i}.degree`)}${F('Fechas', `education.${i}.dates`)}</div>${F('Detalles (promedio, honores, cursos relevantes)', `education.${i}.details`, 2)}</div>`).join('') + `<button class="btn" style="align-self:flex-start" data-ed="add" data-list="education">${ico('plus', 14)}Agregar educación</button>`,
+    experience: () => dateBtn + entries('experience', 'Experiencia', 'Organización', 'Puesto'),
+    leadership: () => dateBtn + entries('leadership', 'Actividad', 'Organización', 'Rol'),
     projects: () => draft.projects.map((p, i) => `<div class="ed-item"><div class="ed-item-h"><span>Proyecto ${i + 1}</span>${ctrl('projects', i)}</div><div class="row">${F('Nombre', `projects.${i}.name`)}${F('Enlace', `projects.${i}.link`)}</div>${F('Fechas', `projects.${i}.dates`)}<div class="an-h" style="margin:4px 0 0">Viñetas</div>${bullets('projects', i)}</div>`).join('') + `<button class="btn" style="align-self:flex-start" data-ed="add" data-list="projects">${ico('plus', 14)}Agregar proyecto</button>`,
-    skills: () => `${F('Habilidades técnicas (una categoría por línea: “Backend: Node.js, Express”)', 'skills.technical', 10)}${F('Certificaciones y cursos', 'skills.certs', 4)}${F('Idiomas', 'skills.languages')}${F('Intereses', 'skills.interests')}`,
-    review: () => `<div class="note" style="margin-bottom:10px"><i data-ic="info"></i><span>Revisor de ortografía y gramática: detecta tildes, errores frecuentes, palabras repetidas, verbos débiles, frases vagas, clichés e inconsistencias de tiempos verbales. Además, los campos usan el corrector de tu navegador (subrayado rojo).</span></div><div id="pfList">${proofHtml(proofread(draft))}</div>`,
+    skills: () => `${skHtml()}${F('Certificaciones y cursos', 'skills.certs', 4)}${F('Idiomas', 'skills.languages')}${F('Intereses', 'skills.interests')}`,
+    review: () => `<div class="note" style="margin-bottom:10px"><i data-ic="info"></i><span>Detecta tildes, errores frecuentes, palabras repetidas, verbos débiles, frases vagas y tiempos verbales mezclados. Pulsa «Corregir» en cada aviso.</span></div><div id="pfList">${proofHtml(proofread(draft))}</div>`,
     tags: () => { const offs = [...S.offers].sort((a, b) => b.createdAt - a.createdAt); if (!offs.length) return '<div class="empty"><p>Carga una oferta en Postulaciones para ver qué etiquetas (palabras clave) están o faltan en este CV.</p></div>'; return `<label>Oferta de referencia<select id="edOfferSel">${offs.map(o => `<option value="${o.id}" ${o.id === edOffer ? 'selected' : ''}>${esc(o.title)} — ${esc(o.company)}</option>`).join('')}</select></label>${getOffer(edOffer) ? tagsHtml(draft, getOffer(edOffer), totalYears(draft) < 2) : ''}`; },
     config: () => `${F('Nombre interno del CV', 'name')}<div class="row"><label>Área<select data-p="area">${['IT', 'Diseño', 'General'].map(a => `<option ${draft.area === a ? 'selected' : ''}>${a}</option>`).join('')}</select></label><label>Enlaces en el CV<select data-p="linkStyle">${[['label', 'Etiqueta (LinkedIn, GitHub, Portafolio) con enlace activo'], ['short', 'Dirección corta (linkedin.com/in/usuario)'], ['full', 'Dirección completa']].map(([v, l]) => `<option value="${v}" ${(draft.linkStyle || 'label') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label><label class="check" style="padding-top:22px"><input type="checkbox" data-p="useInApply" ${draft.useInApply ? 'checked' : ''}><span>Usar en postulaciones</span></label></div>${F('Notas', 'notes', 3)}`
   };
@@ -1647,8 +1660,15 @@ function openCvEditor(id, isNew = false) {
   const box = openModal(`${modalHead(isNew ? 'Nuevo CV (plantilla Harvard)' : 'Editar CV', 'Cada campo es editable · vista previa y puntaje en vivo')}<div class="m-b"><div class="editor"><div><div class="ed-tabs" id="edTabs"></div><div id="edBody"></div></div><div class="live-score"><div id="edScore"></div><div class="paper-wrap"><div id="edPaper"></div></div></div></div></div>
   <div class="m-f"><button class="btn" data-act="close-modal">Cancelar</button><div class="spacer"></div><button class="btn" id="edPdf">${ico('download')}PDF</button><button class="btn" id="edSaveNew">${ico('copy')}Guardar como nueva versión</button><button class="btn btn-primary" id="edSave">${ico('check')}Guardar cambios</button></div>`);
   const AUD = { basics: 'header', education: 'education', experience: 'experience', leadership: 'leadership', projects: 'projects', skills: 'skills', config: 'format' };
-  const updAudit = () => { const a = sectionAudit(draft)[AUD[tab]], el = $('#edAudit', box); if (!el || !a) return; const bad = a.checks.filter(c => !c.ok); el.innerHTML = `<div class="note ${bad.length ? 'warn' : ''}" style="margin:0 0 14px;flex-direction:column;gap:6px"><b>Consejos ATS · ${esc(a.label)} (${a.score} %)</b><span>${esc(a.guide)}</span>${bad.length ? `<div class="xyz-out" style="margin-top:4px">${auditHtml({ checks: bad.slice(0, 5) })}</div>` : '<span>✓ Esta sección cumple las pautas ATS.</span>'}</div>`; };
-  const drawTabs = () => { $('#edTabs', box).innerHTML = TABS.map(([k, l]) => `<button data-ed="tab" data-t="${k}" class="${k === tab ? 'on' : ''}">${l}${['education', 'experience', 'leadership', 'projects'].includes(k) ? ` (${draft[k].length})` : ''}</button>`).join(''); };
+  let fxLog = null, fxSnap = null;
+  const edPanel = a => {
+    const bad = a.checks.filter(c => !c.ok), ok = a.checks.filter(c => c.ok);
+    const items = bad.slice(0, 6).map((c, k) => { const ex = exFor(c.msg); return `<div class="ed-fix"><div class="ed-fix-t"><span class="n">${k + 1}</span><b>${esc(c.msg)}</b></div><p>${esc(c.fix)}</p><div class="ed-fix-a">${c.act ? `<button class="btn btn-sm btn-primary" data-ed="${c.act}">${esc(c.actLabel || 'Corregir')}</button>` : ''}${c.go ? `<button class="btn btn-sm" data-ed="goto" data-p="${esc(c.go)}">Ir al campo</button>` : ''}</div>${ex ? `<details class="ed-ex"><summary>Ver ejemplo</summary>${exHtml(ex)}</details>` : ''}</div>`; }).join('');
+    return `<div class="ed-autofix"><div><b>⚡ Autocorrección ATS</b><small>Aplica los arreglos seguros a todo el CV (contacto, fechas, enlaces, orden, habilidades, redacción).</small></div><button class="btn btn-sm btn-primary" data-ed="autofix">Corregir todo</button></div>${fxLog ? `<div class="ed-pend"><div class="ed-pend-h"><b>${fxLog.n ? fxLog.n + ' correcciones aplicadas' : 'Sin cambios automáticos'}</b>${fxSnap ? '<button class="btn btn-sm" data-ed="autofix-undo">Deshacer</button>' : ''}</div>${fxLog.n ? `<details class="ok-fold" open><summary>Ver cambios</summary>${fixItemsHtml({ items: fxLog.items }, false)}</details>` : ''}${fxLog.rem ? `<small class="muted">Quedan ${fxLog.rem} punto(s) que dependen de tus datos: revisa las pestañas con contador rojo.</small>` : '<small class="muted">✓ No quedan pendientes.</small>'}</div>` : ''}<div class="ed-pend"><div class="ed-pend-h"><b>${esc(a.label)}</b><span class="badge ${bad.length ? (a.score >= 50 ? 'b-warn' : 'b-bad') : 'b-ok'}">${bad.length ? bad.length + ' por corregir' : '✓ Todo en orden'}</span></div><div class="ed-prog"><i style="width:${a.score}%"></i></div>${items || '<p class="muted" style="margin:6px 0 0">Esta sección cumple las pautas ATS.</p>'}${bad.length > 6 ? `<small class="muted">+ ${bad.length - 6} más: corrige estos primero.</small>` : ''}${ok.length ? `<details class="ok-fold"><summary>${ok.length} criterios cumplidos</summary>${ok.map(c => `<div class="chk ok"><i>✓</i><div><b>${esc(c.msg)}</b></div></div>`).join('')}</details>` : ''}<details class="ok-fold"><summary>Qué lee el ATS en esta sección</summary><p style="margin:6px 0 4px">${esc(a.guide)}</p><ul class="ed-bul">${(a.bullets || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul></details></div>`;
+  };
+  const updSug = () => { box.querySelectorAll('.bullet-sug').forEach(e => (e.innerHTML = '')); let SB; try { SB = skillBacking(draft); } catch (e) { return; } SB.unbacked.filter(u => u.best).forEach(u => { const el = box.querySelector(`.bullet-sug[data-list="${u.best.list}"][data-i="${u.best.i}"][data-j="${u.best.j}"]`); if (el) el.insertAdjacentHTML('beforeend', `<button class="sug-chip" data-ed="sug-add" data-list="${u.best.list}" data-i="${u.best.i}" data-j="${u.best.j}" data-s="${esc(u.s)}" title="Úsalo solo si aplicaste ${esc(u.s)} en este logro">💡 Respaldar «${esc(u.s)}» aquí</button>`); }); };
+  const updAudit = () => { const a = sectionAudit(draft)[AUD[tab]], el = $('#edAudit', box); drawTabs(); updSug(); if (!el || !a) return; el.innerHTML = edPanel(a); };
+  const drawTabs = () => { let au = {}; try { au = sectionAudit(draft); } catch (e) { } const pend = k => { const a = au[AUD[k]]; if (!a) return null; if ((k === 'leadership' && !draft.leadership.length)) return null; return a.checks.filter(c => !c.ok).length; }; $('#edTabs', box).innerHTML = TABS.map(([k, l]) => { const n = pend(k); return `<button data-ed="tab" data-t="${k}" class="${k === tab ? 'on' : ''}">${l}${['education', 'experience', 'leadership', 'projects'].includes(k) ? ` (${draft[k].length})` : ''}${n === null ? '' : `<em class="tb ${n ? 'bad' : 'ok'}" title="${n ? n + ' por corregir' : 'Sin pendientes'}">${n || '✓'}</em>`}</button>`; }).join(''); };
   const drawBody = () => { $('#edBody', box).innerHTML = `<div id="edAudit"></div><div class="ed-pane on form">${panes[tab]()}</div>`; drawTabs(); updAudit(); hydrateIcons(box); };
   const drawPrev = () => {
     draft.updatedAt = Date.now() + Math.random(); const a = analyzeCv(draft);
@@ -1660,7 +1680,8 @@ function openCvEditor(id, isNew = false) {
   const dp = debounce(drawPrev, 220);
   drawBody(); drawPrev();
   box.addEventListener('input', e => {
-    const t = e.target; if (!t.dataset || !t.dataset.p) return;
+    const t = e.target; if (t.dataset && t.dataset.sk) { skRows[+t.dataset.i][t.dataset.sk] = t.value; skSave(); dp(); return; }
+    if (!t.dataset || !t.dataset.p) return;
     setP(draft, t.dataset.p, t.type === 'checkbox' ? t.checked : t.value);
     const w = t.closest('.bullet-wrap'); if (w) $('.bullet-hint', w).innerHTML = hint(t.value);
     dp();
@@ -1669,11 +1690,20 @@ function openCvEditor(id, isNew = false) {
   box.addEventListener('click', e => {
     const b = e.target.closest('[data-ed]'); if (!b) return; const d = b.dataset, list = d.list, i = +d.i;
     switch (d.ed) {
+      case 'sug-add': { const t = String(draft[list][i].bullets[+d.j] || '').replace(/[.;\s]+$/, ''); draft[list][i].bullets[+d.j] = / (usando|using) /.test(t) ? `${t} y ${d.s}` : `${t} ${isEs(t) ? 'usando' : 'using'} ${d.s}`; toast('Tecnología añadida', `«${d.s}» quedó en la viñeta. Compruébala: debe ser algo que realmente usaste.`, 'info'); break; }
       case 'tab': tab = d.t; drawBody(); return;
+      case 'autofix': { const plan = atsFixPlan(draft, getOffer(edOffer)); fxSnap = deep(draft); plan.apply(draft); fxLog = { n: plan.items.length, items: plan.items, rem: plan.remaining.length }; skRows = null; toast(plan.items.length ? 'Autocorrección aplicada' : 'Nada que corregir automáticamente', plan.items.length ? `${plan.items.length} cambios. Puedes deshacerlos desde el panel.` : 'Lo que falta depende de tus datos.', plan.items.length ? 'success' : 'info'); break; }
+      case 'autofix-undo': if (fxSnap) { Object.keys(draft).forEach(k => delete draft[k]); Object.assign(draft, fxSnap); fxSnap = null; fxLog = null; skRows = null; } break;
+      case 'goto': { let f = box.querySelector(`[data-p="${d.p}"]`); if (!f && TABS.some(t => t[0] === d.p.split('.')[0])) { tab = d.p.split('.')[0]; drawBody(); f = box.querySelector(`[data-p="${d.p}"]`); } if (f) { f.scrollIntoView({ block: 'center', behavior: 'smooth' }); f.focus({ preventScroll: true }); f.classList.add('fld-hl'); setTimeout(() => f.classList.remove('fld-hl'), 2200); } return; }
       case 'rw': { const slot = $('.rw-slot', b.closest('.bullet-wrap')); if (slot.innerHTML) { slot.innerHTML = ''; return; } slot.innerHTML = rwHtml(rewriteSuggestions(draft[list][i].bullets[+d.j], draft.area, totalYears(draft)), `data-list="${list}" data-i="${i}" data-j="${d.j}"`) || '<small class="muted">Escribe primero la función que cumpliste y vuelve a pulsar.</small>'; return; }
       case 'rw-use': { const r = rewriteSuggestions(draft[list][i].bullets[+d.j], draft.area, totalYears(draft)); if (r) { draft[list][i].bullets[+d.j] = r.variants[+d.v].text; toast('Viñeta reformulada', 'Completa los datos entre [corchetes] con cifras reales.', 'info'); } break; }
       case 'pf-fix': { const lst = proofread(draft), it = lst[+d.i]; if (it && it.fix && it.path) { setP(draft, it.path, it.fix(String(getP(draft, it.path) || ''))); } break; }
-      case 'tag-add': { const k = d.k, lines = String(draft.skills.technical || '').split('\n'), ix = lines.findIndex(l => /^otras?:/i.test(l)); if (ix >= 0) lines[ix] += ', ' + k; else lines.push('Otras: ' + k); draft.skills.technical = lines.join('\n').replace(/^\n/, ''); toast('Etiqueta agregada', `«${k}» quedó en Habilidades (solo conserva lo que realmente dominas).`, 'success'); break; }
+      case 'tag-add': { const k = d.k, lines = String(draft.skills.technical || '').split('\n'), ix = lines.findIndex(l => /^otras?:/i.test(l)); if (ix >= 0) lines[ix] += ', ' + k; else lines.push('Otras: ' + k); draft.skills.technical = lines.join('\n').replace(/^\n/, ''); skRows = null; toast('Etiqueta agregada', `«${k}» quedó en Habilidades (solo conserva lo que realmente dominas).`, 'success'); break; }
+      case 'norm-dates': { let n = 0; ['experience', 'leadership', 'education', 'projects'].forEach(l => (draft[l] || []).forEach(e => { const v = normDate(e.dates); if (v && v !== e.dates) { e.dates = v; n++; } })); toast('Fechas normalizadas', n ? `${n} fecha(s) ajustada(s) al formato Mmm AAAA – Presente.` : 'Las fechas ya tenían el formato correcto.', n ? 'success' : 'info'); break; }
+      case 'sk-add': skRows.push({ c: '', v: '' }); skSave(); drawBody(); drawPrev(); { const ins = box.querySelectorAll('[data-sk="c"]'); if (ins.length) ins[ins.length - 1].focus(); } return;
+      case 'sk-del': skRows.splice(i, 1); skSave(); break;
+      case 'sk-up': if (i > 0) { [skRows[i - 1], skRows[i]] = [skRows[i], skRows[i - 1]]; skSave(); } break;
+      case 'sk-down': if (i < skRows.length - 1) { [skRows[i + 1], skRows[i]] = [skRows[i], skRows[i + 1]]; skSave(); } break;
       case 'add': draft[list].push(list === 'education' ? blankEdu() : list === 'projects' ? blankProj() : blankExp()); break;
       case 'del': if (!confirm('¿Quitar este elemento?')) return; draft[list].splice(i, 1); break;
       case 'up': if (i > 0) [draft[list][i - 1], draft[list][i]] = [draft[list][i], draft[list][i - 1]]; break;
@@ -1924,57 +1954,52 @@ function radarValidate(list) {
 
 /* ───────────── auditoría ATS por sección del CV ───────────── */
 const SECTION_GUIDE = {
-  header: ['Encabezado y contacto', 'Nombre, ciudad/país, email profesional, teléfono con prefijo y 1–2 enlaces (LinkedIn, GitHub o portafolio) como texto visible. Evita foto, íconos y datos en cabeceras o pies de página: muchos ATS no los leen.'],
-  education: ['Educación', 'Modelo Harvard: institución, ubicación, título y fechas, en orden cronológico inverso. Usa el nombre oficial del título; cursos y certificaciones van aparte si no son formación formal.'],
-  experience: ['Experiencia', 'Organización, ubicación, puesto y fechas (Mmm AAAA – Mmm AAAA). 3–5 viñetas por puesto reciente con verbo de acción + resultado medible (fórmula XYZ). Las tecnologías deben aparecer dentro de las viñetas, no solo en Habilidades.'],
-  leadership: ['Liderazgo y actividades', 'Voluntariado, mentoría, comunidades u organización de eventos. Misma estructura que Experiencia. Si tienes poca experiencia laboral, esta sección suma señales blandas verificables.'],
-  projects: ['Proyectos', 'Nombre, enlace, stack y resultado. En perfiles IT y de Diseño es evidencia clave: incluye repositorio o caso de estudio con enlace.'],
-  skills: ['Habilidades, idiomas y certificaciones', 'Una categoría por línea en texto plano (“Backend: Node.js, Express”). Escribe los términos exactos de la oferta; evita barras, estrellas o porcentajes de nivel. Idiomas con nivel (B2, C1, nativo).'],
-  format: ['Formato general', 'Una columna, sin tablas, cuadros ni gráficos; encabezados estándar; PDF con texto o .docx; fuente 10–12 pt; 1 página (2 solo con +10 años de experiencia).']
+  header: ['Encabezado y contacto', 'Lo primero que lee el ATS. Debe estar en texto normal, en el cuerpo del documento (no en cabecera ni pie).', ['Nombre y apellido en la primera línea', 'Email, teléfono con prefijo (+54…) y «ciudad, país»', '1–2 enlaces visibles (LinkedIn, GitHub o portafolio)']],
+  education: ['Educación', 'El ATS clasifica cada estudio por institución, título y año; los ordena del más reciente al más antiguo.', ['Institución + título + años en cada formación', 'Fechas como “2019 – 2022” o “2022 – Presente”', 'Cursos y bootcamps pueden ir aquí si no hay título formal']],
+  experience: ['Experiencia', 'Con empresa, rol y fechas el ATS calcula tus años de experiencia; con las viñetas valida tus herramientas.', ['Cada puesto: organización, rol y “Mar 2023 – Presente”', '3–5 viñetas en los puestos recientes', 'Verbo de acción + métrica + herramienta (fórmula XYZ)']],
+  leadership: ['Liderazgo y actividades', 'Sección opcional que suma señales blandas verificables (voluntariado, mentoría, comunidades).', ['Misma estructura que Experiencia', 'Un logro cuantificado como mínimo']],
+  projects: ['Proyectos', 'Evidencia clave en perfiles IT y Diseño, sobre todo con poca experiencia.', ['Nombre, enlace y stack en cada proyecto', 'Un resultado medible por proyecto']],
+  skills: ['Habilidades, idiomas y certificaciones', 'El ATS compara estos términos exactos con los de la oferta.', ['Una categoría por fila (Backend, Bases de datos…)', 'Sin barras, estrellas ni porcentajes', 'Idiomas con nivel (B2, C1, nativo) y certificaciones con año']],
+  format: ['Formato general', 'Si la estructura se rompe, nada de lo anterior se lee bien.', ['Una columna, sin tablas ni cuadros', 'Encabezados estándar y texto seleccionable', 'Una página (dos solo con +10 años)']]
 };
 function sectionAudit(cv) {
   const an = analyzeCv(cv), b = cv.basics || {}, s = cv.skills || {}, m = cv.meta || {};
-  const C = (ok, msg, fix) => ({ ok: !!ok, msg, fix });
+  const C = (ok, msg, fix, x) => ({ ok: !!ok, msg, fix, ...(x ? (typeof x === 'string' ? { go: x } : x) : {}) });
+  const bp = pred => { for (const l of ['experience']) for (let i = 0; i < (cv[l] || []).length; i++) for (let j = 0; j < (cv[l][i].bullets || []).length; j++) { const t = cv[l][i].bullets[j]; if (t && t.trim() && pred(bulletCheck(t))) return `${l}.${i}.bullets.${j}`; } return null; };
   const yrs = e => yearsOf(e.dates);
   const desc = arr => { const ys = (arr || []).map(yrs).filter(Boolean); return ys.every((y, i) => i === 0 || ys[i - 1].b >= y.b - 0); };
   const exp = cv.experience || [], lead = cv.leadership || [], edu = cv.education || [], pr = cv.projects || [];
   const eb = exp.flatMap(e => e.bullets || []).filter(x => x.trim()), ec = eb.map(bulletCheck), n = Math.max(1, ec.length);
-  const out = {};
+  const out = {}, PA = parseAudit(cv);
   out.header = [
-    C(b.name && b.name.split(/\s+/).length <= 6, 'Nombre completo visible', 'Escribe nombre y apellido en la primera línea, en texto (no imagen).'),
-    C(b.email, 'Email presente', 'Añade un email profesional.'),
-    C(!b.email || !/\d{3,}|[_]{2,}/.test(b.email.split('@')[0]), 'Email con aspecto profesional', 'Usa nombre.apellido@… sin números ni apodos.'),
-    C(/^\+?\d[\d\s().-]{7,}$/.test((b.phone || '').trim()) && /^\+/.test((b.phone || '').trim()), 'Teléfono con prefijo internacional', 'Formato +54 11 5555-0000.'),
-    C(/,/.test(b.location || ''), 'Ubicación con ciudad y país', 'Ejemplo: Buenos Aires, Argentina (los filtros de ubicación lo usan).'),
-    C(b.linkedin || b.github || b.web, 'Enlace profesional (LinkedIn/GitHub/portafolio)', 'Añade al menos un enlace en texto visible.'),
+    ...PA.contact,
+    C(b.linkedin || b.github || b.web, 'Enlace profesional (LinkedIn/GitHub/portafolio)', 'Añade al menos un enlace en texto visible.', 'basics.linkedin'),
     C(!m.emoji, 'Sin emojis ni íconos', 'Quita íconos de contacto: el ATS los lee como caracteres basura.')
   ];
   out.education = [
     C(edu.length, 'Hay al menos una formación', 'Agrega tu formación principal (o curso/bootcamp relevante).'),
-    C(edu.every(e => e.school && e.degree), 'Cada formación tiene institución y título', 'Completa institución y título/programa.'),
-    C(edu.every(e => e.dates && yearsOf(e.dates)), 'Fechas en formato AAAA – AAAA', 'Usa años claros; evita “en curso” sin año.'),
+    ...PA.education,
     C(desc(edu), 'Orden cronológico inverso', 'Pon primero lo más reciente.'),
     C(!cv.sectionOrder || cv.sectionOrder.indexOf('education') <= cv.sectionOrder.indexOf('experience') || cv.sectionOrder.indexOf('education') < 0, 'Educación antes que Experiencia (Harvard)', 'Mueve Educación al inicio, salvo que tu experiencia supere por mucho a tu formación.')
   ];
   const first2 = exp.slice(0, 2);
   const verbCount = {}; eb.forEach(x => { const w = norm(x.split(/\s+/)[0]); verbCount[w] = (verbCount[w] || 0) + 1; });
-  const skillItems = String(s.technical || '').split(/[\n,;:]/).map(x => norm(x.trim())).filter(x => x.length > 2);
-  const inBul = skillItems.filter(k => eb.some(x => norm(x).includes(k))).length;
+  const skillItems = skillList(s.technical), SB = skillBacking(cv);
   out.experience = [
     C(exp.length, 'Hay experiencia registrada', 'Agrega experiencia laboral, freelance o prácticas.'),
-    C(exp.every(e => e.org && e.role && e.dates), 'Cada puesto con organización, rol y fechas', 'Completa los tres datos: el ATS los usa para calcular tu antigüedad.'),
+    ...PA.experience,
     C(desc(exp), 'Orden cronológico inverso', 'Lo más reciente primero.'),
     C(first2.every(e => (e.bullets || []).filter(Boolean).length >= 3), '3–5 viñetas en los 2 puestos más recientes', 'Amplía con logros concretos.'),
-    C(ec.filter(c => c.verb).length / n >= 0.8, '≥ 80 % de viñetas con verbo de acción', 'Empieza con Lideré, Implementé, Reduje…'),
-    C(ec.filter(c => c.metric).length / n >= 0.5, '≥ 50 % de viñetas con métricas', 'Cuantifica: %, tiempo, usuarios, volumen, dinero.'),
-    C(ec.filter(c => c.xyz).length / n >= 0.35, '≥ 35 % de viñetas con fórmula XYZ', '“Logré X, medido por Y, al hacer Z”.'),
-    C(!ec.some(c => c.weak), 'Sin frases débiles (“responsable de…”)', 'Cámbialas por verbos de impacto.'),
-    C(!ec.some(c => c.long), 'Viñetas de máximo 2 líneas', 'Divide las que superen 32 palabras.'),
+    C(ec.filter(c => c.verb).length / n >= 0.8, '≥ 80 % de viñetas con verbo de acción', 'Empieza con Lideré, Implementé, Reduje…', bp(c => !c.verb)),
+    C(ec.filter(c => c.metric).length / n >= 0.5, '≥ 50 % de viñetas con métricas', 'Cuantifica: %, tiempo, usuarios, volumen, dinero.', bp(c => !c.metric)),
+    C(ec.filter(c => c.xyz).length / n >= 0.35, '≥ 35 % de viñetas con fórmula XYZ', 'Usa “Logré X, medido por Y, al hacer Z”: pulsa ✎ XYZ en la viñeta.', bp(c => !c.xyz)),
+    C(!ec.some(c => c.weak), 'Sin frases débiles (“responsable de…”)', 'Cámbialas por verbos de impacto.', bp(c => c.weak)),
+    C(!ec.some(c => c.long), 'Viñetas de máximo 2 líneas', 'Divide las que superen 32 palabras.', bp(c => c.long)),
     C(Math.max(0, ...Object.values(verbCount)) < 3, 'Variedad de verbos (sin repetir 3+ veces)', 'Alterna: Diseñé, Construí, Automaticé, Migré.'),
-    C(!skillItems.length || inBul / skillItems.length >= 0.35, 'Tecnologías respaldadas en las viñetas', 'Menciona en las viñetas las herramientas que listas en Habilidades: el ATS puntúa el contexto.')
+    C(!SB.total || SB.ratio >= 0.35, `Tecnologías respaldadas en las viñetas (${SB.backed.length} de ${SB.total})`, sugText(SB), (SB.unbacked.find(u => u.best) || {}).best ? { go: SB.unbacked.find(u => u.best).best.path } : null)
   ];
   out.leadership = lead.length ? [
-    C(lead.every(e => e.org && e.role), 'Organización y rol completos', 'Completa los datos de cada actividad.'),
+    ...PA.leadership,
     C(allBullets({ experience: lead }).every(x => bulletCheck(x).verb), 'Viñetas con verbo de acción', 'Empieza con verbo en pasado.'),
     C(allBullets({ experience: lead }).some(x => bulletCheck(x).metric), 'Al menos un logro cuantificado', 'Ej.: “Mentoricé a 12 estudiantes”.')
   ] : [C(false, 'Sin sección de liderazgo/actividades', 'Opcional pero valiosa: voluntariado, mentoría, comunidades o eventos.')];
@@ -2002,7 +2027,7 @@ function sectionAudit(cv) {
     C(!cv.parsedPoorly, 'Estructura reconocida por el parser', 'Revisa el orden de las secciones en el editor.')
   ];
   const res = {};
-  Object.entries(out).forEach(([k, checks]) => { res[k] = { key: k, label: SECTION_GUIDE[k][0], guide: SECTION_GUIDE[k][1], checks, score: Math.round(100 * checks.filter(c => c.ok).length / checks.length) }; });
+  Object.entries(out).forEach(([k, checks]) => { res[k] = { key: k, label: SECTION_GUIDE[k][0], guide: SECTION_GUIDE[k][1], bullets: SECTION_GUIDE[k][2], checks, score: Math.round(100 * checks.filter(c => c.ok).length / checks.length) }; });
   return res;
 }
 const auditHtml = (a, only) => (only ? a.checks.filter(c => !c.ok) : a.checks).map(c => `<div class="chk ${c.ok ? 'ok' : 'no'}"><i>${c.ok ? '✓' : '✗'}</i><div><b>${esc(c.msg)}</b>${c.ok ? '' : ` <span class="muted">${esc(c.fix)}</span>${exHtml(exFor(c.msg))}`}</div></div>`).join('');
@@ -2327,15 +2352,23 @@ function rewriteSuggestions(raw, area = 'General', years = 0) {
   for (const [re, rep] of WEAK_MAP) if (re.test(t)) { verb = rep.trim(); rest = t.replace(re, ''); const w1 = rest.split(/\s+/)[0], pv = /(ar|er|ir)$/i.test(w1) && w1.length > 4 ? inf2past(w1) : ''; if (pv) { verb = pv; rest = rest.slice(w1.length).trim(); } break; }
   if (!verb) { const m = t.match(/^(\S+)\s+(.*)$/); if (c.verb && m) { verb = m[1]; rest = m[2]; } else { verb = pickVerb(t, area); rest = t.charAt(0).toLowerCase() + t.slice(1); } }
   rest = rest.replace(/\s+/g, ' ').trim();
-  const tech = (extractKeywords(t, '').keywords || []).filter(k => k.cat !== 'term' && DICTMAP.has(k.k)).slice(0, 2).map(k => k.k);
+  const tech = (extractKeywords(t, '').keywords || []).filter(k => k.cat === 'tool' || k.cat === 'lang').slice(0, 2).map(k => k.k);
   const zTxt = tech.length ? tech.join(' y ') : (area === 'Diseño' ? '[herramienta o método: Figma, investigación, sistema de diseño…]' : area === 'IT' ? '[tecnología o método: Node.js, Docker, pruebas automatizadas…]' : '[herramienta o método: Excel, CRM, plan semanal…]');
   const M = METRICS[area] || METRICS.General, V = [];
   const hasMetric = c.metric;
-  V.push({ title: 'XYZ completa (logro → métrica → método)', text: `${verb} ${rest}${hasMetric ? '' : ', ' + M[0][0]}, medido por [${M[0][1].split(',')[0]}], mediante ${zTxt}.`, why: 'X = lo que lograste · Y = cómo lo mediste · Z = lo que hiciste para lograrlo.' });
+  const miss = c.xyzMiss || [], orig = verb + ' ' + rest;
+  const yAdd = (/venta|cliente|comercial|report|document|atenci/i.test(t) && area !== 'IT') ? M[2][0] : M[0][0], zAdd = tech.length ? `usando ${zTxt}` : `usando ${zTxt}`;
+  if (!c.xyz) {
+    const need = []; if (miss.includes('Y')) need.push(yAdd); if (miss.includes('Z')) need.push(zAdd);
+    V.push({ title: 'Tu viñeta + lo que le falta para ser XYZ', text: `${orig}${need.length ? ', ' + need.join(', ') : ''}.`, why: `Conserva tu redacción y solo añade ${need.length === 2 ? 'el resultado medible (Y) y el método (Z)' : miss.includes('Y') ? 'el resultado medible (Y)' : 'el método o herramienta (Z)'}.` });
+  } else {
+    V.push({ title: 'Ya es XYZ: versión más clara', text: `${orig}.`, why: 'Cumple X, Y y Z. Verifica que la cifra sea real y que el resultado vaya antes que la herramienta.' });
+  }
+  V.push({ title: 'XYZ ordenada (logro → métrica → método)', text: `${verb} ${rest}${hasMetric ? '' : ', ' + M[0][0]}, medido por [${M[0][1].split(',')[0]}], mediante ${zTxt}.`, why: 'X = lo que lograste · Y = cómo lo mediste · Z = lo que hiciste para lograrlo.' });
   V.push({ title: 'Con alcance y escala', text: `${verb} ${rest} ${M[1][0]}${hasMetric ? '' : ', ' + M[2][0]}.`, why: 'Los números de escala (usuarios, equipos, volumen) dan contexto al reclutador y al ATS.' });
   V.push({ title: years < 2 ? 'Versión para proyecto / poca experiencia' : 'Versión corta de impacto', text: years < 2 ? `${verb} ${rest} en un proyecto ${area === 'Diseño' ? 'académico o personal' : 'académico, personal o de bootcamp'} ([N] usuarios de prueba / [N] funciones / [N] semanas), usando ${zTxt}.` : `${verb} ${rest} ([${M[0][1].split(',')[0]}: X %]) con ${zTxt}.`, why: years < 2 ? 'Sin experiencia laboral, un proyecto con alcance concreto vale como logro: indica cuántos usuarios, funciones o semanas.' : 'Cuando el espacio es poco, deja el verbo, el resultado y la herramienta.' });
   const fx = FUNC_EX.find(f => f.re.test(t) && (f.area === area || f.area === 'General' || area === 'General')) || FUNC_EX.find(f => f.re.test(t));
-  const probs = []; if (!c.verb || c.weak) probs.push('Empieza con un verbo de acción en pasado'); if (!hasMetric) probs.push('Falta una métrica (%, tiempo, cantidad, dinero)'); if (!c.xyz) probs.push('No sigue la fórmula XYZ de Google'); if (c.long) probs.push('Es muy larga: máximo 2 líneas');
+  const probs = []; if (!c.verb || c.weak) probs.push('Empieza con un verbo de acción en pasado'); if (!hasMetric) probs.push('Falta una métrica (%, tiempo, cantidad, dinero)'); if (!c.xyz) probs.push('No sigue XYZ' + (c.xyzMiss && c.xyzMiss.length ? ' (falta ' + c.xyzMiss.map(k => ({ X: 'logro claro', Y: 'resultado medible', Z: 'método/herramienta' })[k]).join(' y ') + ')' : '')); if (c.long) probs.push('Es muy larga: máximo 2 líneas');
   return { problems: probs, variants: V, model: fx ? { fn: fx.fn, ex: fx.ex } : null };
 }
 const rwHtml = (r, attrs) => !r ? '' : `<div class="rw-box">${r.problems.length ? `<div class="rw-pr">${r.problems.map(p => `<span class="badge b-warn">${esc(p)}</span>`).join('')}</div>` : '<div class="rw-pr"><span class="badge b-ok">✓ Ya cumple lo básico; aun así puedes pulirla</span></div>'}` +
@@ -2452,7 +2485,10 @@ const ATS_EX = [
   [/Enlace profesional|enlaces a LinkedIn/, 'https://www.linkedin.com/in/tomas-herrera-1a2b3c4d5e6f7g8h9/?originalSubdomain=ar', 'LinkedIn · GitHub · Portafolio (enlaces activos)', 'JobTrack muestra una etiqueta clicable en vez de la dirección larga.'],
   [/emojis|íconos/, '📧 tomas@mail.com  ☎ 11 5555', 'tomas@mail.com · +54 11 5555-0000', 'Los íconos se leen como caracteres basura.'],
   [/formación|Institución y título|institución y título/, 'Estudios universitarios', 'Universidad Tecnológica Nacional — Tecnicatura Universitaria en Programación, 2019 – 2022', 'Institución + título + fechas: así lo clasifica el ATS.'],
-  [/Fechas en formato/, 'desde hace unos años', 'Mar 2023 – Presente', 'El ATS suma fechas para calcular tus años de experiencia.'],
+  [/Fechas en formato|Fechas legibles/, '03/2023 a la fecha · desde hace unos años', 'Mar 2023 – Presente', 'El ATS suma fechas para calcular tus años de experiencia.'],
+  [/fecha de inicio y de fin/, '2022', 'Ene 2022 – Dic 2022', 'Con un solo año no se puede calcular la duración.'],
+  [/Rango de fechas/, 'Mar 2024 – Mar 2021', 'Mar 2021 – Mar 2024', 'El inicio va antes del fin.'],
+  [/Enlaces con formato/, 'linkedin.com/in/ tomas herrera', 'linkedin.com/in/tomas-herrera', 'Sin espacios y con la dirección completa.'],
   [/Orden cronológico/, '2018 – 2020 primero, 2023 – Presente al final', '2023 – Presente primero, luego 2020 – 2023', 'Lo más reciente va arriba.'],
   [/Educación antes que Experiencia/, 'Experiencia → Educación (sin experiencia relevante)', 'Educación → Proyectos → Experiencia', 'Con poca experiencia, la formación va primero.'],
   [/organización, rol y fechas|Cada puesto|Organización y rol/, 'Backend', 'Tech Studio · Backend Developer · Mar 2023 – Presente', 'Los tres datos juntos permiten calcular tu antigüedad.'],
@@ -2479,6 +2515,67 @@ const ATS_EX = [
 ];
 const exFor = msg => { const e = ATS_EX.find(([re]) => re.test(msg)); return e ? { bad: e[1], good: e[2], why: e[3] } : null; };
 const exHtml = x => x ? `<div class="chk-ex"><div class="ex-bad"><b>✗ Mal</b><code>${esc(x.bad).replace(/\n/g, '<br>')}</code></div><div class="ex-good"><b>✓ Bien</b><code>${esc(x.good).replace(/\n/g, '<br>')}</code></div><small class="muted">${esc(x.why)}</small></div>` : '';
+
+/* ───────────── parsing de campos: reglas únicas para el simulador y la auditoría por sección ───────────── */
+const MON3 = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const MON_KEY = { ene: 0, jan: 0, feb: 1, mar: 2, abr: 3, apr: 3, may: 4, jun: 5, jul: 6, ago: 7, aug: 7, set: 8, sep: 8, oct: 9, nov: 10, dic: 11, dec: 11 };
+const DATE_PART = '(?:(?:Ene|Feb|Mar|Abr|May|Jun|Jul|Ago|Sep|Oct|Nov|Dic|Jan|Apr|Aug|Dec)\\.?\\s)?(?:19|20)\\d{2}';
+const DATE_OK = new RegExp(`^${DATE_PART}(?:\\s*[–-]\\s*(?:${DATE_PART}|Presente|Present))?$`);
+function normDate(str) {
+  const s = String(str || '').trim(); if (!s) return null;
+  const cur = /(presente|actual|actualidad|present|current|hoy|now|la fecha|date|en curso)/i.test(s);
+  const re = /(?:(\d{1,2})\s*[\/.-]\s*|([A-Za-zÁÉÍÓÚáéíóú]{3,10})\.?\s+(?:de\s+|del\s+)?)?((?:19|20)\d{2})/g, parts = []; let m;
+  while ((m = re.exec(s))) { let mo = null; if (m[1] && +m[1] >= 1 && +m[1] <= 12) mo = +m[1] - 1; else if (m[2]) { const k = norm(m[2]).slice(0, 3); if (k in MON_KEY) mo = MON_KEY[k]; } parts.push((mo !== null ? MON3[mo] + ' ' : '') + m[3]); }
+  if (!parts.length) return null;
+  if (parts.length === 1) return cur ? `${parts[0]} – Presente` : parts[0];
+  return `${parts[0]} – ${cur && !/\d{4}.*\d{4}/.test(s) ? 'Presente' : parts[1]}`;
+}
+function parseAudit(cv) {
+  const b = cv.basics || {}, jr = isJunior(cv), now = new Date().getFullYear();
+  const K = (ok, msg, fix, sev, x) => ({ ok: !!ok, msg, fix: fix || '', sev: sev || (ok ? 'ok' : 'fail'), ...(x || {}) });
+  const list = (arr, lab, f) => arr.map((e, i) => f(e) ? '' : `${lab} ${i + 1}${e.org || e.name || e.school ? ' («' + (e.org || e.name || e.school) + '»)' : ''}`).filter(Boolean);
+  const where = a => a.length ? ` Revisa: ${a.slice(0, 4).join(', ')}${a.length > 4 ? '…' : ''}.` : '';
+  const nm = (b.name || '').trim(), em = (b.email || '').trim(), ph = (b.phone || '').trim();
+  const contact = [
+    K(nm && nm.split(/\s+/).length >= 2 && nm.split(/\s+/).length <= 6 && !/[\d|@/\\]/.test(nm), 'Nombre completo visible', 'Escribe nombre y apellido en la primera línea, sin títulos, números ni símbolos (“Tomás Herrera”, no “TOMI | Dev”).', null, { go: 'basics.name' }),
+    K(/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(em), em ? 'Email presente' : 'Email presente', em ? 'El email no tiene un formato válido: revisa @ y dominio.' : 'Agrega un email visible en el encabezado.', null, { go: 'basics.email' }),
+    K(!em || !/\d{3,}|_{2,}/.test(em.split('@')[0]), 'Email con aspecto profesional', 'Usa nombre.apellido@… sin números ni apodos.', 'warn', { go: 'basics.email' }),
+    K(/^\+\d[\d\s().-]{7,}$/.test(ph), 'Teléfono con prefijo internacional', 'Formato +54 11 5555-0000: el parser separa el prefijo del número.', ph ? 'warn' : 'fail', { go: 'basics.phone' }),
+    K(/\S+,\s*\S+/.test(b.location || ''), 'Ubicación con ciudad y país', 'Ejemplo: Buenos Aires, Argentina (los filtros por zona usan estos dos datos).', 'warn', { go: 'basics.location' })
+  ];
+  const links = [b.linkedin, b.github, b.web].filter(Boolean);
+  if (links.length) contact.push(K(links.every(l => /(\.[a-z]{2,}|linkedin|github)/i.test(l) && !/\s/.test(l.trim())), 'Enlaces con formato válido', 'Cada enlace debe ser una dirección sin espacios (linkedin.com/in/usuario).', 'warn', { go: b.linkedin ? 'basics.linkedin' : b.github ? 'basics.github' : 'basics.web' }));
+  const jobBlock = (arr, lab, key) => {
+    const o = [];
+    const G = (pred, f) => { const i = arr.findIndex(e => !pred(e)); return i < 0 ? {} : { go: `${key}.${i}.${f}` }; };
+    const firstMiss = (() => { for (let i = 0; i < arr.length; i++) { const e = arr[i]; if (!(e.org || '').trim()) return { go: `${key}.${i}.org` }; if (!(e.role || '').trim()) return { go: `${key}.${i}.role` }; if (!yearsOf(e.dates || '')) return { go: `${key}.${i}.dates` }; } return {}; })();
+    const DT = { act: 'norm-dates', actLabel: 'Normalizar fechas' };
+    if (!arr.length) return o;
+    const noOrg = list(arr, lab, e => (e.org || '').trim()), noRole = list(arr, lab, e => (e.role || '').trim()), noDate = list(arr, lab, e => yearsOf(e.dates || '')), badFmt = list(arr, lab, e => !yearsOf(e.dates || '') || DATE_OK.test((e.dates || '').trim())), noRange = list(arr, lab, e => !yearsOf(e.dates || '') || /–/.test(normDate(e.dates) || '')), rev = list(arr, lab, e => { const ys = ((e.dates || '').match(/(?:19|20)\d{2}/g) || []).map(Number); return !(ys.length >= 2 && ys[0] > ys[1]) && !ys.some(y => y > now + 1); });
+    o.push(K(!noOrg.length && !noRole.length && !noDate.length, 'Cada puesto con organización, rol y fechas', `Faltan datos que el parser necesita para calcular tu antigüedad.${where([...new Set([...noOrg, ...noRole, ...noDate])])}`, jr ? 'warn' : 'fail', firstMiss));
+    o.push(K(!badFmt.length, 'Fechas en formato Mmm AAAA – Mmm AAAA o Presente', `El ATS lee mejor “Mar 2023 – Presente”. Formatos como “03/2023 a la fecha” se interpretan mal. Usa el botón «Normalizar fechas».${where(badFmt)}`, 'warn', { ...G(e => !yearsOf(e.dates || '') || DATE_OK.test((e.dates || '').trim()), 'dates'), ...DT }));
+    o.push(K(!noRange.length, 'Cada puesto con fecha de inicio y de fin', `Un solo año no permite calcular duración: indica inicio – fin o Presente.${where(noRange)}`, 'warn', { ...G(e => !yearsOf(e.dates || '') || /–/.test(normDate(e.dates) || ''), 'dates'), ...DT }));
+    o.push(K(!rev.length, 'Rango de fechas coherente', `El inicio debe ser anterior al fin y no estar en el futuro.${where(rev)}`, null, G(e => { const ys = ((e.dates || '').match(/(?:19|20)\d{2}/g) || []).map(Number); return !(ys.length >= 2 && ys[0] > ys[1]) && !ys.some(y => y > now + 1); }, 'dates')));
+    return o;
+  };
+  const edu = cv.education || [];
+  const education = edu.length ? (() => {
+    const noS = list(edu, 'Formación', e => (e.school || '').trim()), noD = list(edu, 'Formación', e => (e.degree || '').trim()), noY = list(edu, 'Formación', e => yearsOf(e.dates || '')), bad = list(edu, 'Formación', e => !yearsOf(e.dates || '') || DATE_OK.test((e.dates || '').trim()));
+    return [
+      K(!noS.length && !noD.length, 'Cada formación tiene institución y título', `Completa institución y título o programa.${where([...new Set([...noS, ...noD])])}`, null, (() => { const i = edu.findIndex(e => !(e.school || '').trim() || !(e.degree || '').trim()); return i < 0 ? {} : { go: `education.${i}.${(edu[i].school || '').trim() ? 'degree' : 'school'}` }; })()),
+      K(!noY.length, 'Fechas legibles en cada formación', `Incluye un año (aunque sea de finalización prevista): “en curso” sin año se pierde.${where(noY)}`, 'warn', (() => { const i = edu.findIndex(e => !yearsOf(e.dates || '')); return i < 0 ? {} : { go: `education.${i}.dates` }; })()),
+      K(!bad.length, 'Fechas en formato AAAA – AAAA', `Usa “2019 – 2022” o “2022 – Presente”.${where(bad)}`, 'warn', (() => { const i = edu.findIndex(e => yearsOf(e.dates || '') && !DATE_OK.test((e.dates || '').trim())); return i < 0 ? {} : { go: `education.${i}.dates`, act: 'norm-dates', actLabel: 'Normalizar fechas' }; })())
+    ];
+  })() : [];
+  return { contact, experience: jobBlock(cv.experience || [], 'Puesto', 'experience'), leadership: jobBlock(cv.leadership || [], 'Actividad', 'leadership'), education };
+}
+function parsedRowsHtml(cv) {
+  const rows = [...(cv.experience || []).map(e => ['Experiencia', e]), ...(cv.leadership || []).map(e => ['Actividad', e])];
+  const ed = (cv.education || []).map(e => ['Educación', { org: e.school, role: e.degree, dates: e.dates }]);
+  const all = rows.concat(ed); if (!all.length) return '';
+  const cell = (v, ok) => `<td class="${ok ? '' : 'pr-bad'}">${v ? esc(v) : '<i>no detectado</i>'}</td>`;
+  return `<table class="ats-parsed"><thead><tr><th>Bloque</th><th>Organización</th><th>Rol / título</th><th>Fechas leídas</th><th>Duración</th><th></th></tr></thead><tbody>${all.map(([k, e]) => { const y = yearsOf(e.dates || ''), okd = y && DATE_OK.test((e.dates || '').trim()), nd = normDate(e.dates); const dur = y ? `${y.b - y.a || '<1'} año${y.b - y.a === 1 ? '' : 's'}` : '—'; return `<tr><td>${k}</td>${cell(e.org, (e.org || '').trim())}${cell(e.role, (e.role || '').trim())}${cell(e.dates, okd)}<td>${dur}</td><td>${okd ? '<span class="badge b-ok">✓</span>' : y ? `<span class="badge b-warn" title="Formato sugerido">→ ${esc(nd || '')}</span>` : '<span class="badge b-bad">✗</span>'}</td></tr>`; }).join('')}</tbody></table>`;
+}
 
 /* ───────────── perfil con poca o nula experiencia ───────────── */
 const isJunior = cv => totalYears(cv) < 2;
@@ -2534,14 +2631,12 @@ function atsSimulate(cv, offer) {
   ]);
   // 4 campos
   const exps = (cv.experience || []).concat(cv.leadership || []), yrs = an.stats.years;
+  const PA = parseAudit(cv), toD = c => D(c.ok, c.msg, c.fix, c.ok ? 'ok' : c.sev);
   step(4, 'Extracción de campos (parsing)', 'Separa nombre, contacto, puestos, empresas, fechas y estudios; con las fechas calcula cuántos años de experiencia tienes.', [
-    D(b.name && b.name.split(/\s+/).length >= 2, 'Nombre y apellido detectados', 'Pon tu nombre completo en la primera línea.'),
-    D(b.email, 'Email detectado', 'Agrega un email visible en el encabezado.'),
-    D(/^\+?\d[\d\s().-]{7,}$/.test((b.phone || '').trim()), 'Teléfono válido', 'Formato +54 11 5555-0000.', 'warn'),
-    D(/,/.test(b.location || ''), 'Ubicación (ciudad, país)', 'Ejemplo: Buenos Aires, Argentina.', 'warn'),
-    D(exps.every(e => e.org && e.role && e.dates && yearsOf(e.dates)) && (exps.length || jr), exps.length ? 'Cada puesto con empresa, rol y fechas legibles' : 'Sin puestos registrados', 'Completa empresa, rol y fechas «Mar 2023 – Presente».', jr ? 'warn' : 'fail'),
+    ...PA.contact.map(toD), ...PA.experience.map(toD), ...PA.leadership.map(toD), ...PA.education.map(toD),
+    D(exps.length || jr, exps.length ? 'Hay puestos para extraer' : 'Sin puestos registrados', 'Agrega al menos un puesto, práctica o proyecto con fechas.', jr ? 'warn' : 'fail'),
     D(true, `El ATS calcularía ≈ ${Math.round(yrs * 10) / 10} años de experiencia`, '')
-  ], { view: `<div class="ats-fields">${[['Nombre', b.name], ['Email', b.email], ['Teléfono', b.phone], ['Ubicación', b.location], ['Enlaces', cvLinks(cv).map(l => l.label).join(' · ')], ['Experiencia calculada', `≈ ${Math.round(yrs * 10) / 10} años`], ['Último puesto', exps[0] ? `${exps[0].role || '—'} @ ${exps[0].org || '—'}` : '—'], ['Formación', (cv.education || [])[0] ? `${cv.education[0].degree || '—'} · ${cv.education[0].school || ''}` : '—']].map(([k, v]) => `<div><small>${k}</small><b class="${v ? '' : 'miss'}">${esc(v || 'No detectado')}</b></div>`).join('')}</div>` });
+  ], { view: `${parsedRowsHtml(cv)}<div class="ats-fields">${[['Nombre', b.name], ['Email', b.email], ['Teléfono', b.phone], ['Ubicación', b.location], ['Enlaces', cvLinks(cv).map(l => l.label).join(' · ')], ['Experiencia calculada', `≈ ${Math.round(yrs * 10) / 10} años`], ['Último puesto', exps[0] ? `${exps[0].role || '—'} @ ${exps[0].org || '—'}` : '—'], ['Formación', (cv.education || [])[0] ? `${cv.education[0].degree || '—'} · ${cv.education[0].school || ''}` : '—']].map(([k, v]) => `<div><small>${k}</small><b class="${v ? '' : 'miss'}">${esc(v || 'No detectado')}</b></div>`).join('')}</div>` });
   // 5-7 requieren oferta
   let m = null, score = null;
   if (offer) {
@@ -2603,6 +2698,7 @@ async function runAtsSim(e) {
     box.appendChild(row); row.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); await sleep(420);
     const [cls, lab] = ST_ICON[s.st];
     row.className = 'ats-step ' + s.st; row.innerHTML = `<div class="ats-n">${s.id}</div><div class="ats-b"><h4>${esc(s.title)} <span class="badge ${cls}">${lab}</span></h4><p>${esc(s.what)}</p>${s.view || ''}<div class="ats-checks">${s.d.map(c => `<div class="chk ${c.ok ? 'ok' : 'no'}"><i>${c.ok ? '✓' : c.sev === 'warn' ? '!' : '✗'}</i><div><b>${esc(c.msg)}</b>${c.ok ? '' : `<span class="muted"> ${esc(c.fix)}</span>${exHtml(exFor(c.msg))}`}</div></div>`).join('')}</div></div>`;
+    if (s.id === 4 && s.st !== 'pass') row.querySelector('.ats-b').insertAdjacentHTML('beforeend', `<div class="ats-fixbar"><span>Puedo corregir automáticamente nombre, email, teléfono, fechas, enlaces y orden. Lo que dependa de tus datos queda listado.</span><button class="btn btn-sm btn-primary" data-act="ats-fix" data-cv="${cv.id}" data-offer="${offer ? offer.id : ''}">⚡ Corregir automáticamente</button></div>`);
     if (s.st === 'fail' && res.blocked && s === res.blocked) row.insertAdjacentHTML('beforeend', '<div class="ats-stop">⛔ Aquí se detendría el proceso real</div>');
   }
   // veredicto
@@ -2612,7 +2708,7 @@ async function runAtsSim(e) {
   vb.innerHTML = `<header class="card-h"><div><h3>${V[1]}</h3><p>${esc(V[2])}</p></div><span class="badge ${V[0]}">${res.reach === 'yes' ? 'Pasa' : res.reach === 'maybe' ? 'Riesgo' : 'No pasa'}</span></header>
   <div class="an-h">Dónde estás fallando y cómo corregirlo (por prioridad)</div>
   ${fixes.length ? fixes.map((f, i) => `<div class="cons-list"><div class="it"><div class="n">${i + 1}</div><div><b>Paso ${f.s.id} · ${esc(f.c.msg)}</b><div class="muted" style="font-size:12.5px">${esc(f.c.fix)}</div>${exHtml(exFor(f.c.msg))}</div></div></div>`).join('') : '<div class="note"><i data-ic="check"></i><span>No hay correcciones pendientes en esta simulación.</span></div>'}
-  <div class="btn-group" style="margin-top:14px"><button class="btn btn-primary" data-act="cv-edit" data-id="${cv.id}">Abrir el editor del CV</button>${offer ? `<button class="btn" data-act="ats-opt" data-cv="${cv.id}" data-offer="${offer.id}">Optimizar para esta oferta</button><button class="btn" data-act="pack-open" data-cv="${cv.id}" data-offer="${offer.id}">Carta y email para esta oferta</button>` : ''}</div>
+  <div class="btn-group" style="margin-top:14px"><button class="btn btn-primary" data-act="ats-fix" data-cv="${cv.id}" data-offer="${offer ? offer.id : ''}">⚡ Corregir automáticamente</button><button class="btn" data-act="cv-edit" data-id="${cv.id}">Abrir el editor del CV</button>${offer ? `<button class="btn" data-act="ats-opt" data-cv="${cv.id}" data-offer="${offer.id}">Optimizar para esta oferta</button><button class="btn" data-act="pack-open" data-cv="${cv.id}" data-offer="${offer.id}">Carta y email para esta oferta</button>` : ''}</div>
   ${res.jr ? `<div style="margin-top:16px">${juniorHtml(cv)}</div>` : ''}`;
   hydrateIcons(vb); vb.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); $('#atsStatus').textContent = 'Simulación completada.'; ATS_UI.running = false;
 }
@@ -2735,6 +2831,141 @@ function renderDS() {
     <div class="ds-voice"><div><b>Una acción, un nombre</b><p>Si el botón dice «Guardar cambios», el aviso dice «Cambios guardados». El mismo verbo en todo el flujo.</p></div><div><b>Los errores explican y orientan</b><p>«El servidor no responde. Ejecuta npm start…» en vez de «Error de conexión».</p></div><div><b>Lo vacío invita a actuar</b><p>«Aún no tienes CVs. Sube un PDF o DOCX para empezar.»</p></div><div><b>Sin promesas que no se cumplen</b><p>La auto-postulación «registra», no «envía». Se dice exactamente lo que ocurre.</p></div></div></article>`;
   hydrateIcons(box);
 }
+/* ==========================================================================
+   p12 · Autocorrección ATS: aplica solo arreglos seguros y lista lo que requiere tus datos
+   ========================================================================== */
+const EMOJI_G = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}\u{FE0F}★☆●▪►◆■]/gu;
+const COUNTRY_CODE = { argentina: '54', mexico: '52', chile: '56', colombia: '57', peru: '51', uruguay: '598', paraguay: '595', bolivia: '591', ecuador: '593', venezuela: '58', espana: '34', spain: '34', brasil: '55', brazil: '55', 'estados unidos': '1', usa: '1', eeuu: '1', 'costa rica': '506', panama: '507' };
+const titleCase = s => s.toLowerCase().replace(/(^|\s)([a-záéíóúñü])/g, (m, a, b) => a + b.toUpperCase()).replace(/\s(De|Del|La|Las|Los|Y)\s/g, x => x.toLowerCase());
+const cleanTxt = v => String(v ?? '').replace(EMOJI_G, '').replace(/[ \t]{2,}/g, ' ').replace(/^[\s•·\-*►▪]+(?=\S)/, '').trim();
+function fixName(v) {
+  let t = String(v || '').replace(EMOJI_G, '').trim(); if (!t) return v;
+  const parts = t.split(/\s*[|·•\/–—]\s*|\s+-\s+/).filter(Boolean); if (parts.length > 1 && parts[0].trim().split(/\s+/).length >= 2) t = parts[0];
+  t = t.replace(/\d+/g, '').replace(/[|@]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  if (t === t.toUpperCase() || t === t.toLowerCase()) t = titleCase(t);
+  return t;
+}
+const fixEmail = v => String(v || '').replace(/\s+/g, '').toLowerCase().replace(/^mailto:/, '');
+function fixPhone(v, loc) {
+  const raw = String(v || '').trim(); if (!raw || /^\+\d/.test(raw)) return raw;
+  const country = norm(String(loc || '').split(',').pop() || '').trim(), cc = COUNTRY_CODE[country]; if (!cc) return raw;
+  let d = raw.replace(/[^\d]/g, ''); if (!d) return raw;
+  if (d.startsWith('00')) return '+' + d.slice(2);
+  if (d.startsWith(cc) && d.length >= cc.length + 8) return '+' + d;
+  return `+${cc} ${raw.replace(/^[\s(]*0+/, '').replace(/[^\d\s().-]/g, '').trim()}`;
+}
+const fixLink = v => String(v || '').trim().replace(/\s+/g, '').replace(/[?#].*$/, '').replace(/\/+$/, '');
+function weak2past(t) {
+  for (const [re, rep] of WEAK_MAP) if (re.test(t)) {
+    let verb = rep.trim(), rest = t.replace(re, '').trim(); const w1 = rest.split(/\s+/)[0] || '';
+    if (/ing$/i.test(w1) && /^[A-Z]/.test(rep)) return t;
+    const pv = /(ar|er|ir)$/i.test(w1) && w1.length > 4 ? inf2past(w1) : ''; if (pv) { verb = pv; rest = rest.slice(w1.length).trim(); }
+    rest = rest.replace(/\sy\s([a-záéíóúñ]{5,}(?:ar|er|ir))\b/i, (m, w) => { const q = inf2past(w); return q ? ' y ' + q.toLowerCase() : m; });
+    return cap1(verb) + (rest ? ' ' + rest : '');
+  }
+  return t;
+}
+function fixBullet(t) { let x = cleanTxt(t); x = weak2past(x); return x ? cap1(x) : x; }
+function fixSkills(str) {
+  const lines = String(str || '').split('\n').map(l => l.trim()).filter(Boolean), keep = [], loose = [];
+  lines.forEach(l => {
+    const m = l.match(/^([^:]{2,32}):\s*(.*)$/), cat = m ? cleanTxt(m[1]) : '', body = m ? m[2] : l;
+    const items = body.split(/[,;·•|]/).map(x => cleanTxt(x).replace(/\(?\s*\d{1,3}\s*%\s*\)?/g, '').replace(/\(\s*(b[aá]sico|intermedio|avanzado|alto|medio|bajo|experto)\s*\)/gi, '').replace(/\s*[-–]\s*(b[aá]sico|intermedio|avanzado|alto|medio|bajo|experto)\s*$/i, '').replace(/\s{2,}/g, ' ').trim()).filter(Boolean);
+    const seen = new Set(), uniq = items.filter(x => { const k = x.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
+    if (!uniq.length) return;
+    if (cat) keep.push(`${cat}: ${uniq.join(', ')}`); else loose.push(...uniq);
+  });
+  if (loose.length) { const ix = keep.findIndex(l => /^otras?:/i.test(l)); if (ix >= 0) keep[ix] += ', ' + loose.join(', '); else keep.push('Otras: ' + loose.join(', ')); }
+  return keep.join('\n');
+}
+const sortDesc = arr => { if (!arr.length || arr.some(e => !yearsOf(e.dates || ''))) return arr; return arr.map((e, i) => [e, i]).sort((a, b) => { const x = yearsOf(a[0].dates), y = yearsOf(b[0].dates); return (y.b - x.b) || (y.a - x.a) || (a[1] - b[1]); }).map(p => p[0]); };
+
+/* Devuelve { items, remaining, before, after } sin tocar el CV original */
+function atsFixPlan(cv, offer) {
+  const items = [], b = cv.basics || {};
+  const addF = (group, path, label, after, why) => { const before = getP(cv, path); if (before == null || String(before) === String(after) || (!String(before).trim() && !String(after).trim())) return; items.push({ id: items.length, phase: 1, group, path, label, before: String(before), after: String(after), why: why || '', fn: c => setP(c, path, after) }); };
+  // contacto
+  addF('Contacto', 'basics.name', 'Nombre', fixName(b.name), 'Solo nombre y apellido, sin símbolos ni cargos.');
+  addF('Contacto', 'basics.email', 'Email', fixEmail(b.email), 'Sin espacios y en minúsculas.');
+  addF('Contacto', 'basics.phone', 'Teléfono', fixPhone(b.phone, b.location), 'Prefijo internacional deducido de tu país: revísalo.');
+  ['linkedin', 'github', 'web'].forEach(k => addF('Contacto', 'basics.' + k, { linkedin: 'LinkedIn', github: 'GitHub', web: 'Portafolio' }[k], fixLink(b[k]), 'Dirección limpia, sin parámetros de seguimiento.'));
+  // fechas
+  [['experience', 'Experiencia'], ['leadership', 'Actividad'], ['education', 'Educación'], ['projects', 'Proyecto']].forEach(([l, lab]) => (cv[l] || []).forEach((e, i) => { const v = normDate(e.dates); if (v && v !== (e.dates || '').trim() && yearsOf(e.dates || '')) addF('Fechas', `${l}.${i}.dates`, `${lab} ${i + 1}${e.org || e.school || e.name ? ' · ' + (e.org || e.school || e.name) : ''}`, v, 'Formato Mmm AAAA – Mmm AAAA o Presente.'); }));
+  // redacción
+  if (cv.summary) addF('Redacción', 'summary', 'Resumen', cleanTxt(cv.summary), 'Sin íconos ni símbolos decorativos.');
+  [['experience', 'Experiencia'], ['leadership', 'Actividad'], ['projects', 'Proyecto']].forEach(([l, lab]) => (cv[l] || []).forEach((e, i) => (e.bullets || []).forEach((t, j) => { if (t && t.trim()) addF('Redacción', `${l}.${i}.bullets.${j}`, `${lab} ${i + 1} · viñeta ${j + 1}`, fixBullet(t), 'Verbo de acción en pasado, sin viñetas ni íconos duplicados.'); })));
+  // habilidades
+  if (cv.skills && cv.skills.technical) addF('Habilidades', 'skills.technical', 'Habilidades técnicas', fixSkills(cv.skills.technical), 'Sin porcentajes ni niveles, sin duplicados, una categoría por línea.');
+  ['certs', 'languages', 'interests'].forEach(k => { const v = cv.skills && cv.skills[k]; if (v && EMOJI_G.test(v)) { EMOJI_G.lastIndex = 0; addF('Habilidades', 'skills.' + k, { certs: 'Certificaciones', languages: 'Idiomas', interests: 'Intereses' }[k], cleanTxt(v)); } EMOJI_G.lastIndex = 0; });
+  // orden y formato (estructural)
+  [['experience', 'Experiencia'], ['education', 'Educación'], ['leadership', 'Actividades']].forEach(([l, lab]) => { const cur = cv[l] || [], s = sortDesc(cur); if (cur.length > 1 && s.some((e, i) => e !== cur[i])) items.push({ id: items.length, phase: 2, group: 'Orden y formato', label: `${lab}: orden cronológico inverso`, before: 'Orden actual', after: 'Lo más reciente primero', why: 'El ATS espera lo más reciente arriba.', fn: c => { c[l] = sortDesc(c[l]); } }); });
+  const so = cv.sectionOrder; if (so && so.indexOf('education') > so.indexOf('experience') && so.indexOf('experience') >= 0) items.push({ id: items.length, phase: 2, group: 'Orden y formato', label: 'Educación antes que Experiencia', before: 'Experiencia → Educación', after: 'Educación → Experiencia', why: 'Modelo Harvard.', fn: c => { const o = c.sectionOrder.filter(x => x !== 'education'); o.splice(Math.max(0, o.indexOf('experience')), 0, 'education'); c.sectionOrder = o; } });
+  const m = cv.meta || {}; if (m.hasTables || m.multiColumn || m.noText || m.emoji) items.push({ id: items.length, phase: 2, group: 'Orden y formato', label: 'Formato de archivo: una columna, sin tablas, texto seleccionable', before: [m.hasTables && 'tablas', m.multiColumn && 'varias columnas', m.noText && 'sin texto', m.emoji && 'íconos'].filter(Boolean).join(', '), after: 'Se exporta desde JobTrack en formato Harvard', why: 'Al descargar el PDF desde JobTrack el archivo se genera de una columna, sin tablas y con texto real.', fn: c => { c.meta = { ...(c.meta || {}), hasTables: false, multiColumn: false, noText: false, emoji: false, ext: 'pdf' }; c.parsedPoorly = false; } });
+  const apply = (c, ids) => { const sel = items.filter(x => !ids || ids.includes(x.id)); [1, 2].forEach(ph => sel.filter(x => x.phase === ph).forEach(x => x.fn(c))); return c; };
+  const copy = apply(deep(cv));
+  const rem = [], seen = new Set(), push = (sec, c, st) => { if (c.ok || seen.has(c.msg)) return; seen.add(c.msg); rem.push({ sec, msg: c.msg, fix: c.fix, go: c.go, act: c.act, sev: c.sev || 'fail', step: st }); };
+  Object.values(sectionAudit(copy)).forEach(a => a.checks.forEach(c => push(a.label, c)));
+  try { const sim = atsSimulate(copy, offer || null); sim.steps.forEach(s => s.d.forEach(c => push('Paso ' + s.id + ' · ' + s.title, c, s.id))); } catch (e) { }
+  rem.sort((x, y) => (x.sev === 'fail' ? 0 : 1) - (y.sev === 'fail' ? 0 : 1));
+  const secPass = c => Object.values(sectionAudit(c)).filter(a => a.checks.every(k => k.ok)).length, nSec = Object.keys(sectionAudit(cv)).length;
+  return { items, remaining: rem, copy, scoreBefore: analyzeCv(cv).overall, scoreAfter: analyzeCv(copy).overall, secBefore: secPass(cv), secAfter: secPass(copy), nSec, apply };
+}
+const fxShort = (t, n = 150) => { const s = String(t ?? ''); return s.length > n ? s.slice(0, n) + '…' : s; };
+function fixItemsHtml(plan, withBox) {
+  const groups = {}; plan.items.forEach(x => (groups[x.group] = groups[x.group] || []).push(x));
+  return Object.entries(groups).map(([g, arr]) => `<div class="fx-g"><div class="an-h" style="margin:0">${esc(g)} <span class="muted">· ${arr.length}</span></div>${arr.map(x => `<label class="fx-it">${withBox ? `<input type="checkbox" data-fx="${x.id}" checked>` : ''}<div><b>${esc(x.label)}</b><div class="fx-d"><del>${esc(fxShort(x.before))}</del><span>→</span><ins>${esc(fxShort(x.after))}</ins></div><small class="muted">${esc(x.why)}</small></div></label>`).join('')}</div>`).join('');
+}
+const remHtml = (plan, withGo) => plan.remaining.length ? plan.remaining.slice(0, 12).map((r, i) => `<div class="fx-rem"><span class="n">${i + 1}</span><div><b>${esc(r.msg)}</b> <span class="badge ${r.sev === 'fail' ? 'b-bad' : 'b-warn'}">${r.sev === 'fail' ? 'Bloquea' : 'Mejora'}</span><div class="muted" style="font-size:12.5px">${esc(r.fix)}</div><small class="muted">${esc(r.sec)}</small></div></div>`).join('') + (plan.remaining.length > 12 ? `<small class="muted">+ ${plan.remaining.length - 12} más</small>` : '') : '<div class="note"><i data-ic="check"></i><span>Con estas correcciones el CV pasa todos los controles de la simulación.</span></div>';
+
+function openAutoFix(cvId, offerId) {
+  const cv = getCv(cvId); if (!cv) return toast('Selecciona un CV', 'Elige un CV para corregir.', 'warn');
+  const offer = offerId ? getOffer(offerId) : null, plan = atsFixPlan(cv, offer);
+  const box = openModal(`${modalHead('Corregir automáticamente', `«${cv.name}»${offer ? ' · ' + offer.title : ''}`)}<div class="m-b">
+    <div class="fx-sum"><div><small>Puntaje ATS global</small><b>${plan.scoreBefore} → ${plan.scoreAfter}</b></div><div><small>Secciones sin pendientes</small><b>${plan.secBefore} → ${plan.secAfter} de ${plan.nSec}</b></div><div><small>Correcciones seguras</small><b>${plan.items.length}</b></div><div><small>Requieren tus datos</small><b>${plan.remaining.length}</b></div></div>
+    ${plan.items.length ? `<div class="an-h">Se aplicarán estas correcciones (desmarca las que no quieras)</div>${fixItemsHtml(plan, true)}` : '<div class="note"><i data-ic="info"></i><span>No hay correcciones automáticas seguras: lo que falta depende de tus datos.</span></div>'}
+    <div class="an-h" style="margin-top:22px">Quedan por completar con tus datos reales</div><div class="muted" style="font-size:12.5px;margin-bottom:8px">JobTrack no inventa cifras, cargos ni idiomas: estos puntos los completas tú en el editor.</div>${remHtml(plan)}</div>
+    <div class="m-f"><button class="btn" data-act="close-modal">Cancelar</button><div class="spacer"></div><button class="btn" id="fxApply">Aplicar a este CV</button><button class="btn btn-primary" id="fxNew">Guardar como nueva versión y simular</button></div>`, 'md');
+  hydrateIcons(box);
+  const ids = () => [...box.querySelectorAll('[data-fx]')].filter(i => i.checked).map(i => +i.dataset.fx);
+  const done = (target, msg) => { touch(); closeModal(); renderCurrent(); if ($('#atsCv')) { renderAts(); $('#atsCv').value = target.id; runAtsSim(); } toast('Correcciones aplicadas', msg, 'success'); };
+  $('#fxApply', box).onclick = () => { if (!plan.items.length) return closeModal(); plan.apply(cv, ids()); cv.updatedAt = Date.now(); done(cv, `${ids().length} cambio(s) en «${cv.name}». Revisa los pendientes en el editor.`); };
+  $('#fxNew', box).onclick = () => { const n = plan.apply(deep(cv), ids()); n.id = uid(); n.name = cv.name.replace(/ \(ATS\)$/, '') + ' (ATS)'; n.createdAt = n.updatedAt = Date.now(); S.cvs.push(n); done(n, `Se creó «${n.name}» y se simuló de nuevo.`); };
+}
+
+/* ───────────── tecnologías respaldadas: qué habilidades no aparecen en logros y dónde encajan ───────────── */
+const SKILL_THEMES = [
+  [/redis|memcached|cach/i, /(rendimiento|latencia|tiempo de respuesta|velocidad|carga|cach|consulta)/i],
+  [/docker|kubernetes|aws|azure|gcp|render|ci\/cd|github actions|jenkins|terraform|nginx|devops|vercel|heroku/i, /(desplieg|deploy|servidor|hosting|infraestructura|pipeline|release|entrega|contenedor|cloud|nube|publicaci)/i],
+  [/jest|mocha|cypress|selenium|pytest|playwright|vitest|testing|qa\b/i, /(prueba|test|calidad|bug|error|cobertura|regresi|validaci)/i],
+  [/postgres|mysql|sql|mongo|sequelize|prisma|orm|oracle|base de datos/i, /(base de datos|consulta|query|datos|reporte|esquema|modelo|tabla|migraci|persisten|registro)/i],
+  [/node|express|nest|django|flask|spring|fastapi|laravel|rest|graphql|jwt|api|backend/i, /(api|endpoint|servicio|backend|servidor|autentic|integraci|rest|m[oó]dulo|sistema|pagos)/i],
+  [/react|vue|angular|next|svelte|html|css|tailwind|frontend|javascript|typescript/i, /(interfaz|frontend|pantalla|p[aá]gina|web|componente|\bui\b|sitio|usuario|formulario|vista)/i],
+  [/figma|sketch|xd\b|photoshop|illustrator|adobe|canva|wireframe|prototip|ux|ui\b/i, /(dise[ñn]|prototip|interfaz|wireframe|usabilidad|marca|pieza|\bux\b|\bui\b|flujo|gr[aá]fic)/i],
+  [/git|github|gitlab|jira|scrum|agile|trello|kanban|slack/i, /(equipo|colabor|versiona|c[oó]digo|revisi[oó]n|sprint|tarea|proyecto|coordin|planific)/i],
+  [/python|power ?bi|excel|tableau|pandas|looker|analytics/i, /(dato|reporte|dashboard|an[aá]lisis|indicador|automatiz|planilla|m[eé]trica)/i],
+  [/postman|swagger|insomnia|openapi/i, /(api|endpoint|documentaci|prueba|integraci)/i]
+];
+function skillList(technical) {
+  const out = [], seen = new Set();
+  String(technical || '').split('\n').forEach(l => { const m = l.match(/^([^:]{2,32}):\s*(.*)$/), body = m ? m[2] : l; body.split(/[,;·|]/).map(x => x.trim()).filter(x => x.length >= 2).forEach(x => { const k = norm(x); if (!seen.has(k)) { seen.add(k); out.push(x); } }); });
+  return out;
+}
+function skillBacking(cv) {
+  const skills = skillList(cv.skills && cv.skills.technical), bl = [];
+  [['experience', 'Experiencia'], ['leadership', 'Actividad'], ['projects', 'Proyecto']].forEach(([l, lab]) => (cv[l] || []).forEach((e, i) => (e.bullets || []).forEach((t, j) => { if (t && t.trim()) bl.push({ list: l, i, j, t, nt: norm(t), label: `${lab} ${i + 1}${e.org || e.name ? ' (' + (e.org || e.name) + ')' : ''} · viñeta ${j + 1}`, kws: new Set((extractKeywords(t, '').keywords || []).map(k => k.k)), grps: new Set((extractKeywords(t, '').keywords || []).map(k => k.grp)) }); })));
+  const rx = s => new RegExp('(^|[^a-z0-9+#.])' + escRe(norm(s)) + '($|[^a-z0-9+#])');
+  const unbacked = [], backed = [], load = new Map();
+  skills.forEach(s => {
+    const r = rx(s), kk = (extractKeywords(s, '').keywords || [])[0];
+    const hit = bl.some(b => r.test(b.nt) || (kk && b.kws.has(kk.k)));
+    if (hit) { backed.push(s); return; }
+    let best = null, bs = 0;
+    bl.forEach((b, ix) => { let sc = 0; SKILL_THEMES.forEach(([sr, br]) => { if (sr.test(s) && br.test(b.nt)) sc += 3; }); if (kk && b.grps.has(kk.grp)) sc += 2; if (sc) { sc += b.t.split(/\s+/).length >= 8 ? 1 : 0; sc -= (load.get(ix) || 0) * 2; sc -= b.list === 'experience' ? 0 : 0.5; sc -= b.i * 0.2; } if (sc > bs) { bs = sc; best = ix; } });
+    if (best !== null) { load.set(best, (load.get(best) || 0) + 1); const b = bl[best]; unbacked.push({ s, best: { list: b.list, i: b.i, j: b.j, label: b.label, path: `${b.list}.${b.i}.bullets.${b.j}` } }); } else unbacked.push({ s, best: null });
+  });
+  return { total: skills.length, backed, unbacked, ratio: skills.length ? backed.length / skills.length : 1 };
+}
+const sugText = SB => { const w = SB.unbacked.filter(u => u.best).slice(0, 3).map(u => `${u.s} → ${u.best.label}`), n = SB.unbacked.filter(u => !u.best).map(u => u.s).slice(0, 4); return (w.length ? `Sin respaldo: ${w.join('; ')}. Añade la herramienta solo si la usaste en ese logro (botón 💡 bajo la viñeta).` : '') + (n.length ? ` Sin dónde encajar: ${n.join(', ')} → respáldalas en un proyecto o curso, o quítalas si no puedes defenderlas.` : '') || 'Menciona en las viñetas las herramientas que listas en Habilidades.'; };
 
 /* ==========================================================================
    7) Navegación, eventos y arranque
@@ -2778,6 +3009,7 @@ const ACT = {
   'process-one': t => processOffer(getOffer(t.dataset.id)),
   'radar-portal': t => { const r = S.settings.radar, p = t.dataset.p; r.portals = r.portals.includes(p) ? r.portals.filter(x => x !== p) : [...r.portals, p]; persist(); renderRadar(); },
   'radar-add': t => { const x = RADAR.results.find(r => r.id === t.dataset.id); if (x) { radarAdd(x); drawRadarResults(); toast('Agregada a la cola', x.title + ' · ' + x.company, 'success'); updateSideGoal(); } },
+  'ats-fix': t => openAutoFix(t.dataset.cv, t.dataset.offer),
   'ats-opt': t => openOptimize(t.dataset.cv, t.dataset.offer),
   'pack-open': t => openPackage(t.dataset.cv, t.dataset.offer),
   'radar-add-all': () => { const l = radarFiltered().filter(x => !RADAR.added.has(x.id)); l.forEach(radarAdd); drawRadarResults(); updateSideGoal(); toast('Ofertas agregadas', `${l.length} ofertas pasaron a la cola de espera.`, 'success'); },
