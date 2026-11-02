@@ -27,6 +27,7 @@
       <button data-view="historial"><i data-ic="clock"></i><span>Historial</span></button>
       <button data-view="cvs"><i data-ic="file"></i><span>CVs</span></button>
       <button data-view="ats"><i data-ic="target"></i><span>Simulador ATS</span><em class="pill pill-new">nuevo</em></button>
+      <button data-view="entrevista"><i data-ic="spark"></i><span>Simulador de entrevista</span><em class="pill pill-new">nuevo</em></button>
       <button data-view="agentes"><i data-ic="spark"></i><span>Agentes IA</span><em class="pill pill-new">10</em></button>
       <div class="nav-sep">Sistema</div>
       <button data-view="ds"><i data-ic="grid"></i><span>Sistema de diseño</span></button>
@@ -47,6 +48,7 @@
       <div class="search"><i data-ic="search"></i><input id="globalSearch" type="search" placeholder="Buscar ofertas, empresas, palabras clave…" autocomplete="off"><div class="search-results" id="searchResults"></div></div>
       <button class="btn btn-primary" id="quickAdd"><i data-ic="plus"></i><span>Nueva oferta</span></button>
       <button class="icon-btn" id="tourBtn" aria-label="Tour guiado" title="Tour guiado"><i data-ic="help"></i></button>
+      <a class="icon-btn sync-chip" id="syncChip" href="#ajustes" data-st="off" title="Sincronización" hidden><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 1 0-1.4-8.8A6 6 0 1 0 6 18.5"/></svg><i class="sdot"></i></a>
       <button class="icon-btn" id="themeBtn" aria-label="Cambiar tema"><i data-ic="moon"></i></button>
       <div class="avatar" title="Tomas">T</div>
     </header>
@@ -414,6 +416,8 @@
 
       <!-- ================= 8. AGENTES ================= -->
       <section class="view" id="view-ds"><div id="dsBody"></div></section>
+      <section class="view" id="view-entrevista"><div id="intBody"></div></section>
+
       <section class="view" id="view-ats">
         <div class="grid g-agents">
           <article class="card">
@@ -454,8 +458,12 @@
       <!-- ================= 9. AJUSTES ================= -->
       <section class="view" id="view-ajustes">
         <div class="grid g-2">
+          <article class="card span-2">
+            <header class="card-h"><div><h3>Sincronización entre dispositivos</h3><p>Guarda tus datos en tu servidor (PostgreSQL) para verlos igual en tu PC y tu teléfono</p></div></header>
+            <div id="syncBox"></div>
+          </article>
           <article class="card">
-            <header class="card-h"><div><h3>Datos y respaldo</h3><p>Todo se guarda en tu navegador (localStorage)</p></div></header>
+            <header class="card-h"><div><h3>Datos y respaldo</h3><p>Copia local en tu navegador (localStorage)</p></div></header>
             <div class="btn-stack">
               <button class="btn" data-act="backup"><i data-ic="download"></i>Descargar respaldo (.json)</button>
               <label class="btn"><i data-ic="upload"></i>Restaurar respaldo<input type="file" id="restoreFile" accept=".json" hidden></label>

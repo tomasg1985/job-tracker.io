@@ -1,7 +1,7 @@
 {
   "name": "jobtrack-radar-server",
-  "version": "1.0.0",
-  "description": "Backend local del Radar 24 h de JobTrack: rastrea LinkedIn, Indeed y Computrabajo con Playwright",
+  "version": "1.1.0",
+  "description": "Servidor de JobTrack: sincronización de datos (PostgreSQL) y Radar de ofertas",
   "type": "module",
   "main": "server.js",
   "scripts": {
@@ -16,6 +16,9 @@
     "cheerio": "^1.2.0",
     "cors": "^2.8.6",
     "express": "^5.3.0",
+    "pg": "^8.23.1"
+  },
+  "optionalDependencies": {
     "playwright": "^1.48.0"
   }
 }

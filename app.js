@@ -97,7 +97,7 @@ const ico = (n, s = 16) => `<i data-ic="${n}" style="width:${s}px;height:${s}px"
 /* ───────────── almacenamiento ───────────── */
 const KEY = 'jobtrack.v1';
 const DEFAULTS = () => ({
-  v: 1, cvs: [], offers: [], sends: {}, demo: false,
+  v: 1, cvs: [], offers: [], sends: {}, interviews: [], demo: false,
   goals: { dMin: 200, dMax: 300, wMin: 1000, wMax: 1500 },
   settings: {
     theme: 'light', llmKey: '', llmModel: 'claude-sonnet-5-5',
@@ -121,6 +121,7 @@ let S = loadState();
 const persist = debounce(() => {
   try { localStorage.setItem(KEY, JSON.stringify(S)); }
   catch (e) { toast('No se pudo guardar', 'El almacenamiento del navegador está lleno o bloqueado.', 'error'); }
+  if (typeof syncSchedule === 'function') syncSchedule();
 }, 120);
 let cacheV = 0;
 const touch = () => { cacheV++; MATCH_CACHE.clear(); IDF_CACHE = null; persist(); };
@@ -332,6 +333,7 @@ const WEAK_RE = /^(responsable de|encargad[oa] de|a cargo de|particip[eé] en|ay
 const WEAK_MAP = [[/^responsable de /i, 'Lideré '], [/^encargad[oa] de /i, 'Gestioné '], [/^a cargo de /i, 'Gestioné '], [/^particip[eé] en /i, 'Contribuí a '], [/^ayud[eé] a /i, 'Apoyé '], [/^trabaj[eé] en /i, 'Desarrollé '], [/^responsible for /i, 'Led '], [/^worked on /i, 'Built '], [/^helped /i, 'Supported '], [/^assisted /i, 'Supported '], [/^in charge of /i, 'Managed ']];
 const METRIC_RE = /(\d[\d.,]*\s*(%|x\b|k\b|m\b|ms\b|seg|usuarios|users|clientes|customers|horas|hours|d[ií]as|days|semanas|weeks|mil\b|millones|million|requests|req\b|ventas|sales|tickets|endpoints|servicios|services|equipos|people|personas)|[$€£]\s?\d|\b\d{2,}\b)/i;
 const RESULT_RE = /(reduj|reduc|aument|mejor|increment|optimiz|acelera|disminu|elimin|ahorr|logr|gener|lanc|escal|improv|increas|cut|boost|decreas|sav|accelerat|achiev|launch|grew|grow|generat|drove)/i;
+const isTechKw = k => !!k && (k.cat === 'tool' || ['Lenguajes', 'Testing', 'Datos / IA', 'Diseño UX/UI', 'Diseño gráfico'].includes(k.grp));
 const IMPACT_RE = /(ahorr|tiempo|usuarios|users|clientes|customers|ingresos|revenue|ventas|sales|costos|costs|errores|errors|latencia|latency|conversi|retenci|satisfacci|cobertura|coverage|disponibilidad|uptime|rendimiento|performance|productividad|alcance|requests|peticiones|transacciones|entregas|hitos|cumplimiento)/i;
 const METHOD_RE = /(\b(al|mediante|usando|utilizando|implementando|con|tras|migrando|automatizando|introduciendo|aplicando|a trav[eé]s de|gracias a)\b|\b(by|using|through|via|with|after|leveraging|implementing|introducing)\b)/i;
 function bulletCheck(b) {
@@ -343,7 +345,7 @@ function bulletCheck(b) {
   /* XYZ tolerante: X = logro (verbo + objeto), Y = resultado cuantificado, Z = método/herramienta */
   const numY = metric || /\b\d+[\d.,]*\s+\p{L}{3,}/u.test(t) || /\b(de|from)\s+\d[\d.,]*\s*\p{L}*\s+(a|to)\s+\d/iu.test(t) || /\b(el doble|la mitad|triplic|duplic|cuadruplic|doubled|tripled|halved)/i.test(t);
   const outcome = RESULT_RE.test(t) || IMPACT_RE.test(t) || /\b(de|from)\s+\d[\d.,]*\s*\p{L}*\s+(a|to)\s+\d/iu.test(t);
-  const tech = typeof extractKeywords === 'function' && (extractKeywords(t, '').keywords || []).some(k => k.cat === 'tool' || k.cat === 'lang');
+  const tech = typeof extractKeywords === 'function' && (extractKeywords(t, '').keywords || []).some(k => isTechKw(k));
   const method = METHOD_RE.test(t) || tech;
   const X = !weak && verb && words >= 5, Y = numY && (outcome || metric), Z = method && (tech || METHOD_RE.test(t));
   const xyz = !!(X && Y && Z);
@@ -1335,7 +1337,7 @@ function renderRadar() {
   if (!r.v) { r.v = 2; r.hours = Math.max(r.hours, 72); r.app = Math.max(r.app, 100); r.rel = Math.min(r.rel, 35); persist(); } // filtros anteriores (24 h / 5 postulantes / 50 %) ocultaban casi todo
   $('#rfHours').value = r.hours; $('#rfHoursTxt').textContent = radarHoursTxt(r.hours); $('#rfApp').value = r.app; $('#rfAppTxt').textContent = radarAppTxt(r.app); $('#rfRel').value = r.rel; $('#rfRelTxt').textContent = r.rel + ' %';
   $('#rfPortals').innerHTML = RADAR_PORTALS.map(p => `<span class="chip toggle ${r.portals.includes(p) ? 'on' : ''}" data-act="radar-portal" data-p="${p}" role="button" tabindex="0">${p}</span>`).join('');
-  const bk = r.bk || (r.bk = { url: 'http://127.0.0.1:3002', query: '', loc: '' }); $('#bkQuery').value = bk.query; $('#bkLoc').value = bk.loc; $('#bkUrl').value = bk.url;
+  const bk = r.bk || (r.bk = { url: 'http://127.0.0.1:2', query: '', loc: '' }); $('#bkQuery').value = bk.query; $('#bkLoc').value = bk.loc; $('#bkUrl').value = bk.url;
   drawRadarResults();
 }
 function genRadarDemo(portals) {
@@ -2352,7 +2354,7 @@ function rewriteSuggestions(raw, area = 'General', years = 0) {
   for (const [re, rep] of WEAK_MAP) if (re.test(t)) { verb = rep.trim(); rest = t.replace(re, ''); const w1 = rest.split(/\s+/)[0], pv = /(ar|er|ir)$/i.test(w1) && w1.length > 4 ? inf2past(w1) : ''; if (pv) { verb = pv; rest = rest.slice(w1.length).trim(); } break; }
   if (!verb) { const m = t.match(/^(\S+)\s+(.*)$/); if (c.verb && m) { verb = m[1]; rest = m[2]; } else { verb = pickVerb(t, area); rest = t.charAt(0).toLowerCase() + t.slice(1); } }
   rest = rest.replace(/\s+/g, ' ').trim();
-  const tech = (extractKeywords(t, '').keywords || []).filter(k => k.cat === 'tool' || k.cat === 'lang').slice(0, 2).map(k => k.k);
+  const tech = (extractKeywords(t, '').keywords || []).filter(k => isTechKw(k)).slice(0, 2).map(k => k.k);
   const zTxt = tech.length ? tech.join(' y ') : (area === 'Diseño' ? '[herramienta o método: Figma, investigación, sistema de diseño…]' : area === 'IT' ? '[tecnología o método: Node.js, Docker, pruebas automatizadas…]' : '[herramienta o método: Excel, CRM, plan semanal…]');
   const M = METRICS[area] || METRICS.General, V = [];
   const hasMetric = c.metric;
@@ -2966,6 +2968,350 @@ function skillBacking(cv) {
   return { total: skills.length, backed, unbacked, ratio: skills.length ? backed.length / skills.length : 1 };
 }
 const sugText = SB => { const w = SB.unbacked.filter(u => u.best).slice(0, 3).map(u => `${u.s} → ${u.best.label}`), n = SB.unbacked.filter(u => !u.best).map(u => u.s).slice(0, 4); return (w.length ? `Sin respaldo: ${w.join('; ')}. Añade la herramienta solo si la usaste en ese logro (botón 💡 bajo la viñeta).` : '') + (n.length ? ` Sin dónde encajar: ${n.join(', ')} → respáldalas en un proyecto o curso, o quítalas si no puedes defenderlas.` : '') || 'Menciona en las viñetas las herramientas que listas en Habilidades.'; };
+/* ==========================================================================
+   p13 · Sincronización entre dispositivos (servidor + PostgreSQL)
+   El navegador sigue guardando en localStorage; el servidor es la copia compartida.
+   ========================================================================== */
+const SYNC_KEY = 'jobtrack.sync';
+const SYNC = (() => { let c = {}; try { c = JSON.parse(localStorage.getItem(SYNC_KEY) || '{}'); } catch (e) { /* */ } return { url: '', key: '', enabled: false, version: 0, dirty: false, dismissed: false, ...c, status: 'off', last: 0, msg: '', busy: false, again: false }; })();
+const syncSave = () => { try { localStorage.setItem(SYNC_KEY, JSON.stringify({ url: SYNC.url, key: SYNC.key, enabled: SYNC.enabled, version: SYNC.version, dirty: SYNC.dirty, dismissed: SYNC.dismissed })); } catch (e) { /* */ } };
+const syncBase = () => String(SYNC.url || '').replace(/\/+$/, '');
+const sameOrigin = () => /^https?:/.test(location.protocol) ? location.origin : '';
+async function syncApi(path, opt = {}) {
+  const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 20000);
+  try {
+    const r = await fetch(syncBase() + path, { ...opt, signal: ctl.signal, headers: { Authorization: 'Bearer ' + SYNC.key, ...(opt.body ? { 'Content-Type': 'application/json' } : {}) } });
+    let j = null; try { j = await r.json(); } catch (e) { /* */ } return { status: r.status, ok: r.ok, j: j || {} };
+  } finally { clearTimeout(to); }
+}
+const syncPayload = () => { const d = deep(S); if (d.settings) { d.settings.llmKey = ''; if (d.settings.radar && d.settings.radar.bk) delete d.settings.radar.bk.url; } return d; };
+const isDemoState = o => !o || (!(o.cvs || []).length && !(o.offers || []).length) || (!!o.demo && (o.cvs || []).every(c => c.demo));
+const stSummary = o => { const n = o && o.cvs ? o.cvs.length : 0, m = o && o.offers ? o.offers.length : 0, t = Math.max(0, ...((o && o.cvs) || []).map(c => c.updatedAt || 0), ...((o && o.offers) || []).map(x => x.createdAt || 0)); return `${n} CV${n === 1 ? '' : 's'} · ${m} oferta${m === 1 ? '' : 's'}${t ? ' · último cambio ' + new Date(t).toLocaleString('es') : ''}`; };
+
+const SYNC_TXT = { off: ['Sin sincronizar', 'Los datos solo viven en este navegador.'], ok: ['Sincronizado', ''], pending: ['Cambios pendientes', 'Se enviarán en unos segundos.'], syncing: ['Sincronizando…', ''], offline: ['Sin conexión', 'Tus cambios se guardan aquí y se enviarán al reconectar.'], auth: ['Clave rechazada', 'Vuelve a conectar con la clave de acceso.'], error: ['Error del servidor', ''], conflict: ['Conflicto', 'Hay cambios distintos en el servidor.'] };
+function setStatus(st, msg) {
+  SYNC.status = st; SYNC.msg = msg || '';
+  const chip = $('#syncChip'); if (chip) { chip.hidden = !SYNC.enabled && st === 'off' && !sameOrigin(); chip.dataset.st = st; chip.title = (SYNC_TXT[st] || [''])[0] + (msg ? ' · ' + msg : ''); }
+  renderSyncBox();
+}
+function renderSyncBox() {
+  const box = $('#syncBox'); if (!box) return; const [t, d] = SYNC_TXT[SYNC.status] || ['', ''];
+  const ago = SYNC.last ? `Última sincronización: ${new Date(SYNC.last).toLocaleTimeString('es')}.` : '';
+  box.innerHTML = SYNC.enabled
+    ? `<div class="sync-st" data-st="${SYNC.status}"><span class="dot"></span><b>${esc(t)}</b><small class="muted">${esc(SYNC.msg || d)} ${esc(ago)}</small></div><div class="muted" style="font-size:12.5px;margin:6px 0 14px">Servidor: ${esc(syncBase())}</div><div class="btn-group"><button class="btn btn-primary" data-act="sync-now">Sincronizar ahora</button><button class="btn" data-act="sync-off">Desconectar este dispositivo</button></div>`
+    : `<form class="form" id="syncForm"><label>Dirección del servidor<input id="syncUrl" value="${esc(SYNC.url || sameOrigin())}" placeholder="https://jobtrack.onrender.com" autocomplete="off"></label><label>Clave de acceso<input id="syncPass" type="password" placeholder="La que definiste en ACCESS_KEY" autocomplete="current-password"></label><button class="btn btn-primary" type="submit">Conectar y sincronizar</button></form>`;
+}
+function syncAdopt(data, version) {
+  const keep = { llm: S.settings.llmKey, bk: S.settings.radar.bk.url };
+  try { localStorage.setItem(KEY + '.bak', JSON.stringify(S)); } catch (e) { /* */ }
+  const D = DEFAULTS(), o = data, st = o.settings || {}, rd = st.radar || {};
+  S = { ...D, ...o, goals: { ...D.goals, ...(o.goals || {}) }, settings: { ...D.settings, ...st, llmKey: keep.llm, auto: { ...D.settings.auto, ...(st.auto || {}) }, radar: { ...D.settings.radar, ...rd, bk: { ...D.settings.radar.bk, ...(rd.bk || {}), url: keep.bk } } } };
+  SYNC.version = version; SYNC.dirty = false; syncSave();
+  try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* */ }
+  cacheV++; MATCH_CACHE.clear(); IDF_CACHE = null; applyTheme(); renderCurrent();
+}
+function syncMerge(local, remote) {
+  const by = (a, b, ts) => { const m = new Map(); [...(b || []), ...(a || [])].forEach(x => { const p = m.get(x.id); if (!p || ts(x) >= ts(p)) m.set(x.id, x); }); return [...m.values()]; };
+  return { ...remote, ...local, cvs: by(local.cvs, remote.cvs, c => c.updatedAt || c.createdAt || 0), offers: by(local.offers, remote.offers, o => o.updatedAt || o.createdAt || 0), sends: { ...(remote.sends || {}), ...(local.sends || {}) }, interviews: by(local.interviews, remote.interviews, x => x.date || 0), demo: false };
+}
+function syncConflict(remote, fromConnect) {
+  setStatus('conflict');
+  const box = openModal(`${modalHead('¿Qué datos conservar?', 'Este dispositivo y el servidor tienen cambios distintos')}<div class="m-b">
+    <div class="fx-sum" style="grid-template-columns:1fr 1fr"><div><small>Este dispositivo</small><b style="font-size:14px">${esc(stSummary(S))}</b></div><div><small>Servidor</small><b style="font-size:14px">${esc(stSummary(remote.data))}</b></div></div>
+    <div class="note"><i data-ic="info"></i><span><b>Combinar</b> junta los CVs y ofertas de ambos (si un elemento está en los dos, gana el más reciente). Lo que hayas borrado en uno puede volver a aparecer. Antes de reemplazar algo, se guarda una copia local de seguridad.</span></div></div>
+    <div class="m-f"><button class="btn" id="scServer">Usar los del servidor</button><button class="btn" id="scLocal">Usar los de este dispositivo</button><div class="spacer"></div><button class="btn btn-primary" id="scMerge">Combinar ambos</button></div>`, 'md');
+  hydrateIcons(box);
+  const fin = () => { closeModal(); };
+  $('#scServer', box).onclick = () => { syncAdopt(remote.data, remote.version); setStatus('ok'); SYNC.last = Date.now(); fin(); toast('Datos del servidor cargados', 'Se guardó una copia previa en este navegador.', 'success'); };
+  $('#scLocal', box).onclick = async () => { SYNC.version = remote.version; SYNC.dirty = true; syncSave(); fin(); await syncPush(); toast('Servidor actualizado', 'Ahora tiene los datos de este dispositivo.', 'success'); };
+  $('#scMerge', box).onclick = async () => { const m = syncMerge(syncPayload(), remote.data); syncAdopt(m, remote.version); SYNC.dirty = true; syncSave(); fin(); await syncPush(); toast('Datos combinados', 'CVs y ofertas de ambos quedaron guardados.', 'success'); };
+}
+async function syncPush() {
+  if (!SYNC.enabled) return; if (SYNC.busy) { SYNC.again = true; return; }
+  SYNC.busy = true; setStatus('syncing');
+  try {
+    const r = await syncApi('/api/state', { method: 'PUT', body: JSON.stringify({ data: syncPayload(), baseVersion: SYNC.version }) });
+    if (r.status === 409) syncConflict(r.j);
+    else if (r.status === 401) setStatus('auth');
+    else if (r.ok && r.j.ok) { SYNC.version = r.j.version; SYNC.dirty = SYNC.again; SYNC.last = Date.now(); syncSave(); setStatus('ok'); }
+    else setStatus('error', r.j.error || 'Código ' + r.status);
+  } catch (e) { setStatus('offline'); }
+  finally { SYNC.busy = false; if (SYNC.again) { SYNC.again = false; syncPushSoon(); } }
+}
+const syncPushSoon = debounce(() => syncPush(), 1500);
+function syncSchedule() { if (!SYNC.enabled) return; SYNC.dirty = true; syncSave(); if (SYNC.busy) SYNC.again = true; else { setStatus('pending'); syncPushSoon(); } }
+async function syncPull() {
+  if (!SYNC.enabled || SYNC.busy) return;
+  try {
+    const r = await syncApi('/api/state?since=' + SYNC.version);
+    if (r.status === 401) return setStatus('auth');
+    if (!r.ok) return setStatus('error', r.j.error);
+    if (r.j.unchanged) { if (SYNC.dirty) syncPushSoon(); else { SYNC.last = Date.now(); setStatus('ok'); } return; }
+    if (r.j.data == null) { if (!isDemoState(S)) { SYNC.version = 0; await syncPush(); } return; }
+    if (SYNC.dirty) return syncConflict(r.j);
+    syncAdopt(r.j.data, r.j.version); SYNC.last = Date.now(); setStatus('ok'); toast('Datos actualizados', 'Se cargaron los cambios hechos en otro dispositivo.', 'info');
+  } catch (e) { setStatus('offline'); }
+}
+async function syncConnect(url, key) {
+  SYNC.url = String(url || '').trim().replace(/\/+$/, ''); SYNC.key = String(key || '');
+  if (!/^https?:\/\//.test(SYNC.url)) throw new Error('Escribe la dirección completa, con http:// o https://');
+  let r; try { r = await syncApi('/api/state'); } catch (e) { throw new Error('No se pudo conectar con el servidor.'); }
+  if (r.status === 401) throw new Error('Clave de acceso incorrecta.');
+  if (r.status === 503) throw new Error(r.j.error || 'El servidor no está configurado.');
+  if (!r.ok) throw new Error(r.j.error || 'El servidor respondió ' + r.status);
+  SYNC.enabled = true; SYNC.dismissed = true;
+  if (r.j.data == null) { SYNC.version = 0; SYNC.dirty = !isDemoState(S); syncSave(); if (SYNC.dirty) await syncPush(); else setStatus('ok'); return; }
+  if (isDemoState(S)) { syncAdopt(r.j.data, r.j.version); SYNC.last = Date.now(); setStatus('ok'); toast('Conectado', 'Se cargaron tus datos desde el servidor.', 'success'); return; }
+  SYNC.version = r.j.version; SYNC.dirty = true; syncSave(); syncConflict(r.j, true);
+}
+function syncPrompt() {
+  const box = openModal(`${modalHead('Conectar con tu servidor', 'Para ver los mismos datos en tu PC y tu teléfono')}<form id="spForm"><div class="m-b form"><label>Dirección del servidor<input id="spUrl" value="${esc(sameOrigin())}" autocomplete="off"></label><label>Clave de acceso<input id="spKey" type="password" autocomplete="current-password" autofocus></label><small class="muted" id="spErr" style="color:var(--danger,#C0283F)"></small></div><div class="m-f"><button class="btn" type="button" id="spLater">Ahora no</button><div class="spacer"></div><button class="btn btn-primary" type="submit">Conectar</button></div></form>`);
+  $('#spLater', box).onclick = () => { SYNC.dismissed = true; syncSave(); closeModal(); };
+  $('#spForm', box).onsubmit = async e => { e.preventDefault(); const b = e.submitter; if (b) b.disabled = true; try { await syncConnect($('#spUrl', box).value, $('#spKey', box).value); if ($('#spUrl', box)) closeModal(); } catch (err) { $('#spErr', box).textContent = err.message; if (b) b.disabled = false; } };
+}
+async function syncBoot() {
+  setStatus(SYNC.enabled ? 'syncing' : 'off');
+  if (SYNC.enabled) { await syncPull(); if (SYNC.dirty && SYNC.status !== 'conflict') syncPushSoon(); }
+  else if (sameOrigin() && !SYNC.dismissed) { try { const h = await (await fetch('/api/health')).json(); if (h && h.sync && h.sync.available && h.sync.needsKey !== undefined) syncPrompt(); } catch (e) { /* servidor sin sincronización */ } }
+  setStatus(SYNC.status);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) syncPull(); });
+  window.addEventListener('online', () => syncSchedule());
+  setInterval(() => { if (!document.hidden) syncPull(); }, 45000);
+}
+const _rs0 = renderSettings; renderSettings = function () { _rs0(); renderSyncBox(); };
+/* ==========================================================================
+   p14 · Simulador de entrevista (texto y voz): preguntas desde tu CV y la oferta, evaluación por reglas
+   ========================================================================== */
+const INT = { stage: 'setup', cfg: null, qs: [], i: 0, answers: [], listening: false, rec: null, timer: null, t0: 0, tFirst: 0, tts: false, open: null };
+const SR_API = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
+const FILL_RE = /\b(eh+|em+|mmm+|este|o sea|b[aá]sicamente|como que|tipo|digamos|la verdad|en realidad|bueno|pues|um+|uh+|like|you know|basically|kind of|sort of)\b/gi;
+const HEDGE_RE = /\b(creo que|tal vez|quiz[aá]s?|no s[eé]|m[aá]s o menos|supongo|intent[eé]|i guess|maybe|i think|not sure|sort of)\b/gi;
+const NEG_RE = /(mi jefe (era|es)|odiaba|incompetente|horrible|t[oó]xic|no me pagaban|mala empresa|mal jefe|my boss was|hated|toxic)/i;
+const STAR_RE = {
+  S: /(cuando|en ese momento|en aquel|el contexto|la situaci[oó]n|en mi (anterior |[uú]ltimo )?(trabajo|empresa|equipo|proyecto)|durante|when|at that time|the context|the situation)/i,
+  T: /(mi (rol|tarea|objetivo|responsabilidad|misi[oó]n)|ten[ií]a que|deb[ií]a|el objetivo|me encargu|deb[ií]amos|needed to|my (role|goal|task|responsibility)|i had to)/i,
+  R: /(resultado|logr|reduj|aument|mejor[eé]|ahorr|gracias a eso|como consecuencia|al final|finalmente|result|achiev|reduced|increased|improved|\d+\s*%|\b\d{2,}\b)/i
+};
+const isActionWord = w => /^[a-záéíóúñ]{4,}(é|í)$/i.test(w) || /^(i )?(built|led|designed|created|implemented|decided|wrote|fixed|reduced|improved|launched|automated)$/i.test(w);
+const WORDS = t => (String(t || '').toLowerCase().match(/[\p{L}\d%]+/gu) || []);
+
+const QBANK = {
+  intro: [['Cuéntame sobre ti y tu trayecto profesional.', 'Tell me about yourself and your professional background.']],
+  star: [
+    ['Cuéntame de una vez en que tuviste un desacuerdo con un compañero o cliente. ¿Cómo lo resolviste?', 'Tell me about a time you disagreed with a colleague or client. How did you resolve it?'],
+    ['Háblame de un proyecto con una fecha límite muy ajustada. ¿Qué hiciste?', 'Tell me about a project with a very tight deadline. What did you do?'],
+    ['Describe un error que cometiste en un trabajo o proyecto y qué aprendiste.', 'Describe a mistake you made on a job or project and what you learned.'],
+    ['Cuéntame de un logro del que te sientas especialmente orgulloso.', 'Tell me about an achievement you are especially proud of.'],
+    ['¿Cuándo tuviste que aprender algo nuevo muy rápido para cumplir un objetivo?', 'When did you have to learn something new very quickly to meet a goal?']
+  ],
+  sit: {
+    IT: [['Tu API en producción empieza a responder lento un viernes por la tarde. ¿Qué haces, paso a paso?', 'Your production API starts responding slowly on a Friday afternoon. What do you do, step by step?'], ['Te piden entregar una funcionalidad en 2 días, pero la calidad correría riesgo. ¿Cómo lo manejas?', 'You are asked to ship a feature in 2 days but quality would suffer. How do you handle it?']],
+    'Diseño': [['Un cliente rechaza tu propuesta final diciendo “no me convence”. ¿Cómo sigues?', 'A client rejects your final proposal saying “I am not convinced”. How do you proceed?'], ['Tienes feedback contradictorio de tres personas sobre el mismo diseño. ¿Qué haces?', 'You get conflicting feedback from three people on the same design. What do you do?']],
+    General: [['Un cliente molesto reclama por un error que no fue tuyo. ¿Cómo respondes?', 'An angry customer complains about a mistake that was not yours. How do you respond?'], ['Tienes dos tareas urgentes de distintas personas y tiempo solo para una. ¿Cómo decides?', 'You have two urgent tasks from different people and time for only one. How do you decide?']]
+  },
+  motiv: [['¿Por qué quieres este puesto{co} y qué puedes aportar?', 'Why do you want this role{co} and what can you contribute?']],
+  sal: [['¿Cuáles son tus expectativas salariales?', 'What are your salary expectations?']],
+  close: [['¿Tienes alguna pregunta para nosotros?', 'Do you have any questions for us?']]
+};
+const QTIP = {
+  intro: 'Estructura “presente → pasado → futuro” en 60–90 s: quién eres hoy, qué has hecho y qué buscas.',
+  tech: 'Responde con un caso real: contexto, qué decidiste, qué herramienta usaste y qué resultado medible obtuviste.',
+  gap: 'No lo niegues: di qué has hecho cercano, cómo aprendes rápido y da un ejemplo de una herramienta nueva que aprendiste.',
+  cv: 'Es una pregunta sobre tu propio CV: tienes que poder explicar cada logro con detalle y cifras.',
+  star: 'Usa STAR: Situación, Tarea, Acción (lo que TÚ hiciste) y Resultado con una cifra.',
+  sit: 'Ordena tu respuesta en pasos (“primero… luego… finalmente”) y explica el criterio de cada decisión.',
+  motiv: 'Menciona algo concreto de la empresa o del puesto y une tu experiencia con lo que ellos necesitan.',
+  sal: 'Da un rango razonable según el mercado, di que es negociable según el paquete total y pregunta por el rango del puesto.',
+  close: 'Siempre pregunta: equipo, primeros 90 días, cómo miden el éxito. No preguntes solo por vacaciones o sueldo.'
+};
+function genQuestions(cv, offer, cfg) {
+  const es = cfg.lang === 'es', L = es ? 0 : 1, area = cv.area || 'General', jr = isJunior(cv), pick = (arr, n) => [...arr].sort(() => Math.random() - .5).slice(0, n);
+  const co = offer && offer.company ? (es ? ' en ' : ' at ') + offer.company : '';
+  const Q = []; const add = (kind, text, extra = {}) => Q.push({ id: Q.length, kind, text, tip: QTIP[kind], ...extra });
+  add('intro', QBANK.intro[0][L]);
+  const m = offer ? matchOffer(offer, cv) : null;
+  const techKw = m ? [...m.matched.filter(isTechKw), ...m.partial.filter(isTechKw)].sort((a, b) => (b.must ? 1 : 0) - (a.must ? 1 : 0)).slice(0, 4).map(i => i.k) : (extractKeywords(cvText(cv), '').keywords || []).filter(k => isTechKw(k)).slice(0, 4).map(k => k.k);
+  const gaps = m ? m.missing.filter(isTechKw).sort((a, b) => (b.must ? 1 : 0) - (a.must ? 1 : 0)).slice(0, 2).map(i => i.k) : [];
+  const bl = allBullets(cv).filter(b => bulletCheck(b).metric || bulletCheck(b).xyz);
+  const want = cfg.type;
+  if (want !== 'behavioral') {
+    techKw.slice(0, 2).forEach(k => add('tech', es ? `Veo que trabajas con ${k}. Cuéntame un caso real en el que lo usaste: qué problema resolvías y qué resultado obtuviste.` : `I see you work with ${k}. Tell me about a real case where you used it: what problem you solved and the result.`, { expect: { kw: [k], star: true, metric: true } }));
+    gaps.slice(0, 1).forEach(k => add('gap', es ? `La oferta pide ${k} y no lo veo en tu CV. ¿Qué experiencia tienes con eso o con algo similar?` : `The role asks for ${k} and I don't see it in your CV. What experience do you have with it or something similar?`, { expect: { kw: [k], star: false, metric: false } }));
+    pick(bl, 1).forEach(b => add('cv', es ? `En tu CV dices: «${fxShort(b, 120)}». ¿Cómo lo lograste, qué decisiones tomaste y qué harías distinto?` : `Your CV says: “${fxShort(b, 120)}”. How did you achieve it, what decisions did you make, and what would you do differently?`, { expect: { kw: techKw.slice(0, 2), star: true, metric: true } }));
+    pick(QBANK.sit[area] || QBANK.sit.General, 1).forEach(q => add('sit', q[L], { expect: { kw: [], star: false, metric: false, steps: true } }));
+  }
+  if (want !== 'technical') pick(QBANK.star, jr ? 2 : 3).forEach(q => add('star', q[L], { expect: { kw: [], star: true, metric: true } }));
+  add('motiv', QBANK.motiv[0][L].replace(/\{co\}/g, co), { expect: { kw: techKw.slice(0, 2), star: false, metric: false } });
+  if (cfg.n >= 8) add('sal', QBANK.sal[0][L]);
+  add('close', QBANK.close[0][L]);
+  const keep = Q.filter(q => ['intro', 'close'].includes(q.kind)), mid = Q.filter(q => !['intro', 'close'].includes(q.kind));
+  const body = mid.slice(0, Math.max(1, cfg.n - keep.length));
+  return [keep[0], ...body, keep[1]].filter(Boolean).map((q, i) => ({ ...q, id: i }));
+}
+
+function evalAnswer(q, text, voice, cv, offer) {
+  const t = String(text || '').trim(), W = WORDS(t), n = W.length;
+  const good = [], fix = [];
+  if (n < 8) return { score: 0, dims: { estructura: 0, especificidad: 0, metricas: 0, claridad: 0, protagonismo: 0 }, good, fix: ['No hay respuesta: en una entrevista real el silencio cuenta como “no sé”. Aunque no domines el tema, explica cómo lo abordarías.'], words: n, fillers: 0 };
+  const fillers = (t.match(FILL_RE) || []).length, rate = fillers / n * 100, hedges = (t.match(HEDGE_RE) || []).length;
+  const hasMetric = METRIC_RE.test(t), kind = q.kind, ex = q.expect || {};
+  // estructura
+  const S_ = STAR_RE.S.test(t), T_ = STAR_RE.T.test(t), R_ = STAR_RE.R.test(t), nAct = W.filter(isActionWord).length, A_ = nAct >= 2;
+  let est;
+  if (ex.star || kind === 'star') { est = ([S_, T_, A_, R_].filter(Boolean).length / 4) * 100; if (!S_) fix.push('Falta la Situación: abre con el contexto (“En mi último proyecto, cuando…”).'); if (!T_) fix.push('Falta la Tarea: di cuál era tu objetivo o responsabilidad (“Mi objetivo era…”).'); if (!A_) fix.push('Falta la Acción: cuenta lo que TÚ hiciste, en pasado y primera persona (“Diseñé…, decidí…”).'); if (!R_) fix.push('Falta el Resultado: cierra con el impacto y una cifra (“Reduje 40 % el tiempo…”).'); if (est >= 75) good.push('Tu respuesta sigue la estructura STAR.'); }
+  else if (ex.steps || kind === 'sit') { const steps = (t.match(/\b(primero|segundo|luego|despu[eé]s|entonces|finalmente|por [uú]ltimo|first|then|next|finally)\b/gi) || []).length; est = Math.min(100, steps * 30 + (A_ ? 20 : 0)); if (steps < 3) fix.push('Ordénala en pasos: “primero…, luego…, finalmente…”. El entrevistador evalúa tu proceso de decisión.'); else good.push('Explicas tu proceso en pasos claros.'); }
+  else if (kind === 'intro') { const p1 = /(soy|trabajo|actualmente|i am|currently)/i.test(t), p2 = /(he trabajado|trabaj[eé]|durante|a[ñn]os|experiencia|worked|years)/i.test(t), p3 = /(busco|quiero|me interesa|objetivo|looking|want|goal)/i.test(t); est = ([p1, p2, p3].filter(Boolean).length / 3) * 100; if (!p1) fix.push('Empieza por el presente: quién eres y qué haces hoy.'); if (!p2) fix.push('Resume tu trayectoria con 1–2 logros concretos.'); if (!p3) fix.push('Cierra con lo que buscas y por qué encaja con este puesto.'); if (est === 100) good.push('Cubres presente, pasado y futuro.'); }
+  else if (kind === 'sal') { const num = /\d/.test(t), neg = /(negoci|seg[uú]n|depende|rango|paquete|negotiable|range|depends)/i.test(t); est = (num ? 55 : 15) + (neg ? 45 : 0); if (!num) fix.push('Da una cifra o un rango: evadir la pregunta se lee como inseguridad.'); if (!neg) fix.push('Aclara que es negociable según el paquete completo y el alcance del rol.'); }
+  else if (kind === 'close') { const qs = (t.match(/\?|¿/g) || []).length, good_ = /(equipo|90 d[ií]as|[eé]xito|crecimiento|proceso|team|success|growth)/i.test(t); est = Math.min(100, qs * 30 + (good_ ? 40 : 0) + (n >= 15 ? 20 : 0)); if (!qs) fix.push('Formula 2–3 preguntas concretas: equipo, primeros 90 días, cómo se mide el éxito.'); }
+  else { const co = /(empresa|equipo|producto|misi[oó]n|cultura|company|team|product|mission)/i.test(t), ap = /(aporto|puedo aportar|mi experiencia|contribu|bring|contribute)/i.test(t); est = (co ? 50 : 10) + (ap ? 50 : 10); if (!co) fix.push('Menciona algo concreto de la empresa o del producto: demuestra que investigaste.'); if (!ap) fix.push('Conecta tu experiencia con lo que ellos necesitan (“Puedo aportar… porque…”).'); }
+  // especificidad
+  let esp; const kws = [...new Set([...(ex.kw || []), ...((offer && offer.keywords) || []).filter(k => k.must && k.cat !== 'term').slice(0, 5).map(k => k.k)])];
+  const hit = kws.filter(k => new RegExp('(^|[^a-z0-9])' + escRe(norm(k)) + '($|[^a-z0-9])').test(norm(t)));
+  const caps = (t.match(/\b[A-ZÁÉÍÓÚ][\p{L}.]{2,}/gu) || []).length;
+  if (['tech', 'cv', 'gap'].includes(kind)) { esp = Math.min(100, (hit.length ? 55 : 15) + Math.min(45, caps * 9 + (hasMetric ? 15 : 0))); if (!hit.length && (ex.kw || []).length) fix.push(`Nombra la herramienta o tecnología concreta (${ex.kw.slice(0, 2).join(', ')}) y cómo la usaste.`); else if (hit.length) good.push(`Mencionas tecnologías relevantes: ${hit.slice(0, 3).join(', ')}.`); }
+  else { esp = Math.min(100, 30 + Math.min(50, caps * 10) + (hasMetric ? 20 : 0)); if (esp < 50) fix.push('Sé más concreto: nombres de proyectos, herramientas, equipos o cifras reales.'); }
+  // métricas
+  const needM = ex.metric || kind === 'star'; const met = hasMetric ? 100 : needM ? 15 : 60;
+  if (hasMetric) good.push('Incluyes cifras que respaldan lo que dices.'); else if (needM) fix.push('No hay números: cuantifica el resultado (%, tiempo, usuarios, dinero). Si no tienes el dato exacto, usa una estimación honesta.');
+  // claridad
+  let cla = n >= 60 && n <= 180 ? 100 : n < 30 ? 30 : n < 60 ? 65 : n <= 250 ? 75 : 45;
+  if (n < 30) fix.push(`Muy corta (${n} palabras): desarrolla con un ejemplo. Apunta a 60–180 palabras (≈ 30–90 s).`); else if (n < 60) fix.push(`Algo corta (${n} palabras): añade contexto y resultado.`); else if (n > 250) fix.push(`Demasiado larga (${n} palabras): el entrevistador pierde el hilo. Ve al punto y deja detalles para si preguntan.`); else if (n > 180) fix.push(`Un poco larga (${n} palabras): recorta a lo esencial.`); else good.push('Duración adecuada.');
+  cla -= Math.min(40, rate * 8) + Math.min(15, hedges * 5);
+  if (rate >= 2) fix.push(`Muletillas: ${fillers} (“${[...new Set((t.match(FILL_RE) || []).map(x => x.toLowerCase()))].slice(0, 4).join('”, “')}”). Sustituye por una pausa breve.`); else if (n >= 60) good.push('Casi sin muletillas.');
+  if (hedges >= 2) fix.push('Demasiadas dudas (“creo que”, “tal vez”, “más o menos”). Afirma con seguridad lo que sí sabes.');
+  // protagonismo
+  const plural = (t.match(/\b(nosotros|hicimos|hemos|desarrollamos|implementamos|decidimos|we)\b/gi) || []).length, sing = W.filter(isActionWord).length + (t.match(/\b(yo|mi|me encargu|i)\b/gi) || []).length;
+  let pro = plural > 0 && sing === 0 ? 30 : plural > sing * 2 ? 55 : sing ? 100 : 60;
+  if (pro <= 55) fix.push('Todo en plural (“hicimos”): aclara qué hiciste TÚ. El entrevistador evalúa tu aporte individual.'); else if (sing && n >= 40) good.push('Dejas claro tu aporte personal.');
+  if (NEG_RE.test(t)) { pro -= 30; fix.push('Evita criticar a antiguos jefes o empresas: transforma la queja en aprendizaje.'); }
+  // voz
+  const out = { estructura: est, especificidad: esp, metricas: met, claridad: Math.max(0, cla), protagonismo: Math.max(0, pro) };
+  if (voice && voice.secs > 3) { const wpm = Math.round(n / (voice.secs / 60)); out.ritmo = wpm >= 110 && wpm <= 160 ? 100 : wpm >= 90 && wpm <= 175 ? 75 : 45; if (wpm < 90) fix.push(`Ritmo lento (${wpm} palabras/min): ideal 110–160. Practica en voz alta con cronómetro.`); else if (wpm > 175) fix.push(`Hablas muy rápido (${wpm} palabras/min): baja el ritmo y haz pausas entre ideas.`); else good.push(`Buen ritmo (${wpm} palabras/min).`); if (voice.lat > 6) fix.push(`Tardaste ${Math.round(voice.lat)} s en empezar: toma 3–5 s para ordenar ideas, pero no más.`); voice.wpm = wpm; }
+  const W_ = { estructura: .3, especificidad: .25, metricas: .15, claridad: .2, protagonismo: .1 }, score = Math.round(Object.entries(W_).reduce((a, [k, w]) => a + out[k] * w, 0));
+  return { score, dims: out, good, fix, words: n, fillers, voice: voice || null, model: modelFor(q, cv, offer) };
+}
+function modelFor(q, cv, offer) {
+  const e = (cv.experience || [])[0] || {}, org = e.org || '[tu empresa]', role = e.role || '[tu rol]', yrs = Math.round(totalYears(cv) * 10) / 10, top = (extractKeywords(cvText(cv), '').keywords || []).filter(k => isTechKw(k)).slice(0, 3).map(k => k.k).join(', ') || '[tus 2–3 herramientas clave]';
+  const b = allBullets(cv).find(x => bulletCheck(x).xyz) || allBullets(cv)[0] || '';
+  const M = {
+    intro: `Soy ${cv.targetRole || role}${yrs ? ` con ${yrs} años de experiencia` : ''}. Hoy trabajo en ${org} como ${role}. Antes/además, ${b ? b.replace(/\.$/, '').replace(/^./, c => c.toLowerCase()) : '[tu logro más relevante con cifra]'}. Domino ${top}. Ahora busco [qué quieres] y este puesto encaja porque [motivo concreto].`,
+    star: `Situación: en ${org}, cuando [contexto en 1 frase]. Tarea: mi objetivo era [objetivo medible]. Acción: yo [decisión 1], [decisión 2] y [qué herramienta usé]. Resultado: [cifra: % / tiempo / usuarios] y aprendí [lección].`,
+    tech: `Contexto: en ${org} necesitábamos [problema]. Mi parte fue [tu rol exacto]. Usé [herramienta] porque [criterio de decisión frente a alternativas]. Resultado: [métrica antes → después].`,
+    cv: `${b ? '«' + fxShort(b, 140) + '»' : 'Tu logro'} — Partíamos de [situación inicial]. Decidí [decisión técnica/creativa] porque [motivo]. Lo medí con [métrica]. Si lo repitiera, mejoraría [aprendizaje].`,
+    gap: `No he usado [herramienta] en producción, pero sí [herramienta similar] en [proyecto], donde [logro]. Aprendí [otra herramienta nueva] en [plazo] haciendo [ejemplo] y puedo hacerlo igual con esta. Ya empecé con [curso/proyecto de práctica].`,
+    sit: `Primero [diagnóstico/aclarar el problema y a quién afecta]. Luego [acción inmediata y su criterio]. Después [comunicación con el equipo/cliente]. Finalmente [corrección de fondo y cómo evitar que se repita].`,
+    motiv: `Me interesa ${offer && offer.company ? offer.company : '[empresa]'} por [algo concreto: producto, cultura, reto técnico]. Puedo aportar [tu experiencia relevante con cifra], justo lo que el puesto necesita en [requisito de la oferta].`,
+    sal: `Según el mercado para este rol y mi experiencia, busco entre [rango bajo] y [rango alto], negociable según el paquete completo y el alcance. ¿Cuál es el rango previsto para el puesto?`,
+    close: `¿Cómo es un día típico en el equipo? ¿Qué se esperaría de mí en los primeros 90 días? ¿Cómo miden el éxito en este rol?`
+  };
+  return M[q.kind] || M.star;
+}
+
+/* ───────────── UI ───────────── */
+const DIM_LAB = { estructura: 'Estructura (STAR)', especificidad: 'Especificidad técnica', metricas: 'Métricas y resultados', claridad: 'Claridad (longitud y muletillas)', protagonismo: 'Protagonismo personal', ritmo: 'Ritmo de voz' };
+const DIM_ADV = { estructura: 'Practica STAR con 3 historias reales (conflicto, logro, error) y ensáyalas en voz alta.', especificidad: 'Prepara 3 casos por tecnología clave de la oferta: problema, decisión y resultado.', metricas: 'Anota una cifra para cada logro de tu CV (antes → después) y úsala al hablar.', claridad: 'Responde en 60–120 s; graba tus respuestas y elimina muletillas con pausas.', protagonismo: 'Cambia “hicimos” por “yo hice” en la parte que fue tuya, sin restar mérito al equipo.', ritmo: 'Habla entre 110 y 160 palabras por minuto; marca pausas entre ideas.' };
+const ivScore = s => (s >= 75 ? ['b-ok', 'Listo para entrevistar'] : s >= 55 ? ['b-warn', 'Practica un poco más'] : ['b-bad', 'Necesita refuerzo']);
+const bar = (lab, v) => `<div class="as"><span>${esc(lab)}</span><i style="--w:${Math.round(v)}%;--c:${v >= 75 ? 'var(--teal)' : v >= 55 ? '#F79009' : '#F04438'}"></i><b>${Math.round(v)}</b></div>`;
+function intStop() { clearInterval(INT.timer); INT.timer = null; intMic(false); try { speechSynthesis && speechSynthesis.cancel(); } catch (e) { /* */ } }
+function sparkline(vals) { if (vals.length < 2) return ''; const w = 160, h = 36, mx = 100, pts = vals.map((v, i) => `${(i / (vals.length - 1)) * (w - 8) + 4},${h - 4 - (v / mx) * (h - 8)}`).join(' '); return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><polyline points="${pts}" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linejoin="round"/></svg>`; }
+function renderInterview() {
+  const box = $('#intBody'); if (!box) return; S.interviews = S.interviews || [];
+  if (INT.stage === 'setup') {
+    const hist = [...S.interviews].sort((a, b) => b.date - a.date);
+    box.innerHTML = `<div class="grid g-agents"><article class="card"><header class="card-h"><div><h3>Simulador de entrevista</h3><p>Practica con preguntas generadas desde tu CV y la oferta, y descubre en qué fallas</p></div></header>
+      <form class="form" id="intForm"><label>CV con el que te presentas<select id="intCv">${S.cvs.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('') || '<option value="">Sin CVs</option>'}</select></label>
+      <label>Oferta (opcional, mejora las preguntas)<select id="intOffer"><option value="">Entrevista general</option>${[...S.offers].sort((a, b) => b.createdAt - a.createdAt).map(o => `<option value="${o.id}">${esc(o.title)} — ${esc(o.company)}</option>`).join('')}</select></label>
+      <div class="row"><label>Tipo<select id="intType"><option value="mixed">Mixta</option><option value="technical">Técnica</option><option value="behavioral">Conductual (STAR)</option></select></label><label>Preguntas<select id="intN"><option>5</option><option selected>7</option><option>10</option></select></label></div>
+      <div class="row"><label>Idioma<select id="intLang"><option value="es">Español</option><option value="en">English</option></select></label><label>Modo de respuesta<select id="intMode"><option value="text">Escribir</option><option value="voice" ${SR_API ? '' : 'disabled'}>Hablar (micrófono)${SR_API ? '' : ' — no disponible en este navegador'}</option></select></label></div>
+      <button class="btn btn-primary" type="submit"><i data-ic="play"></i>Comenzar entrevista</button></form>
+      <div class="note"><i data-ic="info"></i><span>La evaluación usa reglas (STAR, cifras, tecnologías, muletillas, longitud y ritmo): es una guía de práctica, no la opinión de un reclutador. El micrófono requiere Chrome o Edge y HTTPS (o localhost). La cámara aún no está incluida.</span></div></article>
+      <article class="card"><header class="card-h"><div><h3>Tus prácticas</h3><p>${hist.length ? hist.length + ' sesión(es) guardada(s) · se sincronizan con tus dispositivos' : 'Aún no has practicado'}</p></div></header>${hist.length ? `<div style="margin-bottom:var(--s-4)">${sparkline([...hist].reverse().map(h => h.score))}</div>` + hist.slice(0, 8).map(h => `<div class="int-h"><div><b>${h.score}/100</b> <span class="badge ${ivScore(h.score)[0]}">${ivScore(h.score)[1]}</span><div class="muted" style="font-size:12.5px">${new Date(h.date).toLocaleString('es')} · ${esc(h.offerTitle || 'General')} · ${h.mode === 'voice' ? 'voz' : 'texto'}</div></div><span class="btn-group"><button class="btn btn-sm" data-int="view" data-id="${h.id}">Ver</button><button class="btn btn-sm btn-danger" data-int="del" data-id="${h.id}">${ico('trash', 14)}</button></span></div>`).join('') : '<div class="empty"><p>Haz tu primera práctica para ver tu evolución aquí.</p></div>'}</article></div>`;
+  } else if (INT.stage === 'run') {
+    const q = INT.qs[INT.i], v = INT.cfg.mode === 'voice';
+    box.innerHTML = `<article class="card int-card"><header class="card-h"><div><h3>Pregunta ${INT.i + 1} de ${INT.qs.length}</h3><p>${esc(q.tip)}</p></div><span class="int-timer" id="intTimer">0:00</span></header>
+      <div class="int-prog"><i style="width:${(INT.i / INT.qs.length) * 100}%"></i></div>
+      <p class="int-q">${esc(q.text)}</p>
+      <label class="check" style="margin-bottom:var(--s-3)"><input type="checkbox" id="intTts" ${INT.tts ? 'checked' : ''}><span>Leer la pregunta en voz alta</span></label>
+      <textarea id="intAns" rows="8" spellcheck="true" lang="${INT.cfg.lang}" placeholder="${v ? 'Pulsa el micrófono y habla; el texto aparece aquí y puedes corregirlo.' : 'Escribe tu respuesta como si hablaras en la entrevista…'}"></textarea>
+      <div class="btn-group" style="margin-top:var(--s-4)">${v ? `<button class="btn" id="intMic" data-int="mic">🎤 Hablar</button>` : ''}<button class="btn btn-primary" data-int="answer">Responder</button><button class="btn" data-int="skip">Saltar</button><button class="btn btn-danger" data-int="quit">Terminar</button></div>
+      <small class="muted" id="intCount">0 palabras · ideal 60–180</small></article>`;
+    INT.t0 = Date.now(); INT.tFirst = 0; clearInterval(INT.timer); INT.timer = setInterval(() => { const s = Math.floor((Date.now() - INT.t0) / 1000), el = $('#intTimer'); if (el) { el.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; el.classList.toggle('warn', s > 120); } }, 1000);
+    speakQ(q.text);
+  } else if (INT.stage === 'fb') {
+    const a = INT.answers[INT.answers.length - 1], q = INT.qs[a.qi], r = a.ev, last = INT.i >= INT.qs.length - 1;
+    box.innerHTML = `<article class="card"><header class="card-h"><div><h3>Feedback · pregunta ${a.qi + 1}</h3><p>${esc(q.text)}</p></div><span class="badge ${ivScore(r.score)[0]}">${r.score}/100</span></header>
+      <div class="agent-scores">${Object.entries(r.dims).map(([k, v]) => bar(DIM_LAB[k], v)).join('')}</div>
+      ${r.good.length ? `<div class="an-h">Lo que hiciste bien</div>${r.good.map(x => `<div class="chk ok"><i>✓</i><div><b>${esc(x)}</b></div></div>`).join('')}` : ''}
+      ${r.fix.length ? `<div class="an-h">Qué corregir</div>${r.fix.map(x => `<div class="chk no"><i>✗</i><div><b>${esc(x)}</b></div></div>`).join('')}` : ''}
+      ${r.model ? `<details class="ok-fold" open><summary>Estructura modelo para esta pregunta (complétala con tus datos reales)</summary><p style="margin:8px 0">${esc(r.model).replace(/\[([^\]]+)\]/g, '<mark>[$1]</mark>')}</p></details>` : ''}
+      <details class="ok-fold"><summary>Tu respuesta (${r.words} palabras)</summary><p style="margin:8px 0;white-space:pre-wrap">${esc(a.text)}</p></details>
+      <div class="btn-group" style="margin-top:var(--s-5)"><button class="btn btn-primary" data-int="next">${last ? 'Ver informe final' : 'Siguiente pregunta'}</button><button class="btn" data-int="retry">Repetir esta pregunta</button></div></article>`;
+  } else if (INT.stage === 'report') intReport(box);
+  hydrateIcons(box);
+}
+function intReport(box) {
+  const R = INT.report, [cls, lab] = ivScore(R.score), dims = Object.entries(R.dims).sort((a, b) => a[1] - b[1]), prev = [...S.interviews].filter(h => h.id !== R.id && (h.cvId === R.cvId)).sort((a, b) => b.date - a.date)[0];
+  box.innerHTML = `<article class="card"><header class="card-h"><div><h3>Informe de la entrevista</h3><p>${esc(R.offerTitle || 'Entrevista general')} · ${R.answers.length} respuesta(s) · ${R.mode === 'voice' ? 'voz' : 'texto'}</p></div><span class="badge ${cls}">${lab}</span></header>
+    <div class="fx-sum"><div><small>Puntaje global</small><b>${R.score}/100</b></div><div><small>Respuestas ≥ 75</small><b>${R.answers.filter(a => a.score >= 75).length} de ${R.answers.length}</b></div><div><small>Muletillas totales</small><b>${R.answers.reduce((s, a) => s + (a.fillers || 0), 0)}</b></div><div><small>Vs. práctica anterior</small><b>${prev ? (R.score - prev.score >= 0 ? '+' : '') + (R.score - prev.score) : '—'}</b></div></div>
+    <div class="an-h">Dónde estás fallando</div><div class="agent-scores">${Object.entries(R.dims).map(([k, v]) => bar(DIM_LAB[k], v)).join('')}</div>
+    <div class="an-h" style="margin-top:var(--s-6)">Qué practicar primero</div>${dims.slice(0, 3).map(([k, v], i) => `<div class="fx-rem"><span class="n">${i + 1}</span><div><b>${esc(DIM_LAB[k])} · ${Math.round(v)}/100</b><div class="muted" style="font-size:12.5px">${esc(DIM_ADV[k])}</div></div></div>`).join('')}
+    <div class="an-h" style="margin-top:var(--s-6)">Respuesta por respuesta</div>${R.answers.map((a, i) => `<details class="ok-fold"><summary>${i + 1}. ${esc(fxShort(a.q, 90))} — <b>${a.score}/100</b></summary><div style="margin-top:8px">${a.fix.map(x => `<div class="chk no"><i>✗</i><div><b>${esc(x)}</b></div></div>`).join('') || '<div class="chk ok"><i>✓</i><div><b>Sin observaciones importantes.</b></div></div>'}</div></details>`).join('')}
+    <div id="intAi"></div>
+    <div class="btn-group" style="margin-top:var(--s-5)"><button class="btn btn-primary" data-int="again">Practicar de nuevo</button>${S.settings.llmKey ? '<button class="btn" data-int="ai">Pedir feedback con IA (experimental)</button>' : ''}<button class="btn" data-int="home">Volver</button></div></article>`;
+}
+function speakQ(text) { if (!INT.tts) return; try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = INT.cfg.lang === 'es' ? 'es-AR' : 'en-US'; speechSynthesis.speak(u); } catch (e) { /* */ } }
+function intMic(on) {
+  const btn = $('#intMic'); if (on === false || (on === undefined && INT.listening)) { INT.listening = false; try { INT.rec && INT.rec.stop(); } catch (e) { /* */ } if (btn) btn.textContent = '🎤 Hablar'; return; }
+  if (!SR_API) return toast('No disponible', 'Tu navegador no admite reconocimiento de voz: usa Chrome o Edge.', 'warn');
+  const ta = $('#intAns'); if (!ta) return; const base = ta.value ? ta.value.trim() + ' ' : '';
+  const rec = new SR_API(); rec.lang = INT.cfg.lang === 'es' ? 'es-AR' : 'en-US'; rec.continuous = true; rec.interimResults = true; INT.rec = rec; INT.listening = true; INT.voiceBase = base; INT.voiceFinal = '';
+  rec.onresult = ev => { if (!INT.tFirst) INT.tFirst = Date.now(); let fin = '', tmp = ''; for (let i = 0; i < ev.results.length; i++) (ev.results[i].isFinal ? (fin += ev.results[i][0].transcript + ' ') : (tmp += ev.results[i][0].transcript)); INT.voiceFinal = fin; ta.value = INT.voiceBase + fin + tmp; ta.dispatchEvent(new Event('input')); };
+  rec.onerror = e => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { INT.listening = false; toast('Micrófono bloqueado', 'Permite el micrófono para este sitio (requiere HTTPS o localhost).', 'error'); if (btn) btn.textContent = '🎤 Hablar'; } };
+  rec.onend = () => { if (INT.listening) { INT.voiceBase = ta.value.trim() + ' '; try { rec.start(); } catch (e) { /* */ } } };
+  try { rec.start(); if (btn) btn.textContent = '⏹ Detener'; } catch (e) { INT.listening = false; }
+}
+function intSubmit(skip) {
+  const q = INT.qs[INT.i], text = skip ? '' : ($('#intAns').value || ''), secs = (Date.now() - INT.t0) / 1000, voice = INT.cfg.mode === 'voice' ? { secs, lat: INT.tFirst ? (INT.tFirst - INT.t0) / 1000 : 0 } : null;
+  intStop(); const ev = evalAnswer(q, text, voice, getCv(INT.cfg.cvId), getOffer(INT.cfg.offerId));
+  INT.answers.push({ qi: q.id, q: q.text, kind: q.kind, text, ev, score: ev.score, fix: ev.fix, fillers: ev.fillers }); INT.stage = 'fb'; renderInterview();
+}
+function intFinish() {
+  intStop(); const A = INT.answers.filter(a => a.text.trim());
+  if (!A.length) { INT.stage = 'setup'; renderInterview(); return toast('Sin respuestas', 'Responde al menos una pregunta para generar el informe.', 'info'); }
+  const keys = [...new Set(A.flatMap(a => Object.keys(a.ev.dims)))], dims = {}; keys.forEach(k => { const v = A.filter(a => a.ev.dims[k] !== undefined); dims[k] = v.reduce((s, a) => s + a.ev.dims[k], 0) / v.length; });
+  const score = Math.round(A.reduce((s, a) => s + a.score, 0) / A.length), o = getOffer(INT.cfg.offerId);
+  const R = { id: uid(), date: Date.now(), cvId: INT.cfg.cvId, offerId: INT.cfg.offerId || '', offerTitle: o ? `${o.title} — ${o.company}` : '', mode: INT.cfg.mode, lang: INT.cfg.lang, score, dims, answers: A.map(a => ({ q: a.q, kind: a.kind, text: a.text, score: a.score, fix: a.fix, good: a.ev.good, fillers: a.fillers })) };
+  S.interviews = S.interviews || []; S.interviews.push(R); touch(); INT.report = R; INT.stage = 'report'; renderInterview();
+}
+async function intAi() {
+  const R = INT.report, key = S.settings.llmKey, out = $('#intAi'); if (!key || !out) return; out.innerHTML = '<div class="note"><span>Analizando con IA…</span></div>';
+  const qa = R.answers.map((a, i) => `P${i + 1}: ${a.q}\nR: ${fxShort(a.text, 900)}`).join('\n\n');
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify({ model: S.settings.llmModel || 'claude-sonnet-5-5', max_tokens: 900, messages: [{ role: 'user', content: `Eres un entrevistador senior. Evalúa estas respuestas de una práctica de entrevista${R.offerTitle ? ' para ' + R.offerTitle : ''}. En español: 1) las 3 mayores debilidades, 2) un consejo concreto por cada una y 3) cómo reescribirías la peor respuesta en 4 frases. No inventes datos del candidato.\n\n${qa}` }] }) });
+    if (!r.ok) throw new Error('HTTP ' + r.status); const j = await r.json(); const t = (j.content && j.content[0] && j.content[0].text) || '';
+    out.innerHTML = `<div class="an-h" style="margin-top:var(--s-6)">Feedback de IA (experimental)</div><div class="note"><span style="white-space:pre-wrap">${esc(t)}</span></div>`;
+  } catch (e) { out.innerHTML = `<div class="note warn"><span>No se pudo obtener el feedback de IA: ${esc(e.message)}.</span></div>`; }
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-int]'); if (!b) return; const a = b.dataset.int;
+  if (a === 'answer') intSubmit(false); else if (a === 'skip') intSubmit(true); else if (a === 'mic') intMic();
+  else if (a === 'next') { if (INT.i >= INT.qs.length - 1) intFinish(); else { INT.i++; INT.stage = 'run'; renderInterview(); } }
+  else if (a === 'retry') { INT.answers.pop(); INT.stage = 'run'; renderInterview(); }
+  else if (a === 'quit') { if (INT.answers.length) intFinish(); else { intStop(); INT.stage = 'setup'; renderInterview(); } }
+  else if (a === 'again' || a === 'home') { INT.stage = 'setup'; renderInterview(); }
+  else if (a === 'ai') intAi();
+  else if (a === 'view') { const h = S.interviews.find(x => x.id === b.dataset.id); if (h) { INT.report = h; INT.cfg = { cvId: h.cvId }; INT.stage = 'report'; renderInterview(); } }
+  else if (a === 'del') { if (confirm('¿Eliminar esta práctica del historial?')) { S.interviews = S.interviews.filter(x => x.id !== b.dataset.id); touch(); renderInterview(); } }
+});
+document.addEventListener('submit', e => {
+  if (e.target.id !== 'intForm') return; e.preventDefault();
+  const cv = getCv($('#intCv').value); if (!cv) return toast('Falta un CV', 'Sube o crea un CV primero.', 'warn');
+  const offer = getOffer($('#intOffer').value), lang = $('#intLang').value;
+  INT.cfg = { cvId: cv.id, offerId: offer ? offer.id : '', type: $('#intType').value, n: +$('#intN').value, lang, mode: $('#intMode').value };
+  INT.qs = genQuestions(cv, offer, INT.cfg); INT.i = 0; INT.answers = []; INT.stage = 'run'; renderInterview();
+});
+document.addEventListener('input', e => { if (e.target.id === 'intAns') { const n = WORDS(e.target.value).length, el = $('#intCount'); if (el) el.textContent = `${n} palabras · ideal 60–180`; } });
+document.addEventListener('change', e => { if (e.target.id === 'intTts') { INT.tts = e.target.checked; if (INT.tts) speakQ(INT.qs[INT.i].text); else try { speechSynthesis.cancel(); } catch (x) { /* */ } } });
 
 /* ==========================================================================
    7) Navegación, eventos y arranque
@@ -2981,6 +3327,7 @@ const VIEWS = {
   cvs: ['CVs', 'Base de CVs con análisis y editor Harvard', renderCvs],
   ds: ['Sistema de diseño', 'Tokens, componentes y reglas visuales de JobTrack', renderDS],
   ats: ['Simulador ATS', 'Recorre paso a paso cómo un ATS procesa tu CV', renderAts],
+  entrevista: ['Simulador de entrevista', 'Practica preguntas reales y descubre en qué fallas', renderInterview],
   agentes: ['Agentes IA', 'Equipo de agentes que evalúan tu CV', renderAgents],
   ajustes: ['Ajustes y datos', 'Respaldo, demo y configuración', renderSettings]
 };
@@ -3024,10 +3371,12 @@ const ACT = {
   'quick-ai-bulk': () => quickAiBulk(),
   'opt-open': t => openOptimize(t.dataset.cv, t.dataset.offer),
   'export-csv': () => exportCsv(),
+  'sync-now': () => syncPull().then(() => SYNC.dirty && syncPush()),
+  'sync-off': () => { if (!confirm('Este dispositivo dejará de sincronizar. Tus datos locales se conservan.')) return; SYNC.enabled = false; SYNC.dirty = false; SYNC.key = ''; syncSave(); setStatus('off'); },
   'backup': () => download('jobtrack_respaldo.json', JSON.stringify(S, null, 2), 'application/json'),
   'load-demo': () => { if ((S.cvs.length || S.offers.length) && !S.demo && !confirm('Esto reemplazará tus CVs y ofertas actuales por datos de demostración. ¿Descargaste un respaldo?')) return; seedDemo(); RADAR.results = []; renderCurrent(); toast('Datos demo cargados', '3 CVs, 28 ofertas y 30 días de envíos.', 'success'); },
   'clear-demo': () => { clearDemo(); renderCurrent(); toast('Datos demo eliminados', 'Tus datos reales se conservaron.'); },
-  'reset-all': () => { if (confirm('Se borrarán TODOS los CVs, ofertas y registros. ¿Continuar?')) { S = DEFAULTS(); RADAR.results = []; touch(); renderCurrent(); toast('Datos borrados'); } }
+  'reset-all': () => { if (confirm('Se borrarán TODOS los CVs, ofertas y registros' + (SYNC.enabled ? ' también del servidor y de tus otros dispositivos' : '') + '. ¿Continuar?')) { S = DEFAULTS(); RADAR.results = []; touch(); renderCurrent(); toast('Datos borrados'); } }
 };
 document.addEventListener('click', e => {
   if (!e.target.closest('.dl-menu')) $$('.dl-menu').forEach(x => x.classList.remove('open'));
@@ -3112,6 +3461,7 @@ function bind() {
   $('#atsForm').addEventListener('submit', runAtsSim);
   $('#agCv').addEventListener('change', renderAgents);
   $('#llmForm').addEventListener('submit', e => { e.preventDefault(); S.settings.llmKey = $('#llmKey').value.trim(); S.settings.llmModel = $('#llmModel').value.trim() || 'claude-sonnet-5-5'; persist(); toast('Ajustes guardados', S.settings.llmKey ? 'Los agentes usarán el modelo para redactar.' : 'Agentes en modo local.', 'success'); });
+  document.addEventListener('submit', e => { if (e.target.id !== 'syncForm') return; e.preventDefault(); const b = e.submitter; if (b) b.disabled = true; syncConnect($('#syncUrl').value, $('#syncPass').value).catch(err => { toast('No se pudo conectar', err.message, 'error'); }).finally(() => { if (b) b.disabled = false; renderSyncBox(); }); });
   $('#restoreFile').onchange = async e => { try { const o = JSON.parse(await e.target.files[0].text()); if (!o.cvs || !o.offers) throw new Error('Archivo de respaldo inválido'); S = { ...DEFAULTS(), ...o }; touch(); renderCurrent(); toast('Respaldo restaurado', '', 'success'); } catch (err) { toast('No se pudo restaurar', err.message, 'error'); } e.target.value = ''; };
   window.addEventListener('hashchange', () => { const v = location.hash.slice(1); if (VIEWS[v] && v !== currentView) go(v); });
 }
@@ -3122,7 +3472,7 @@ function init() {
   hydrateIcons(); applyTheme(); bind();
   if (firstRun && !S.cvs.length && !S.offers.length) seedDemo();
   const h = location.hash.slice(1); go(VIEWS[h] ? h : 'dashboard');
-  setTimeout(offerTour, 800);
+  syncBoot().catch(() => { }).finally(() => setTimeout(() => { if ($('#modal').hidden) offerTour(); }, 500));
   if (S.demo && !RADAR.results.length) { RADAR.results = scoreRadar(genRadarDemo(RADAR_PORTALS.slice(0, 8))); renderDashRadar(); }
 }
 window.addEventListener('resize', debounce(() => { Object.values(CH).forEach(c => c && c.resize()); }, 150));

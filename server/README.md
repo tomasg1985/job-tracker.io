@@ -26,3 +26,21 @@ Luego abre **http://localhost:3001** (el servidor también sirve JobTrack; evita
 GetOnBoard (incluye nº de postulantes), RemoteOK, We Work Remotely, Remotive y Arbeitnow se leen por API/RSS con `fetch` (Node 18+): son rápidas y no abren Chromium. Por defecto el Radar usa estas + Computrabajo; LinkedIn e Indeed solo si activas su chip.
 Respeta sus condiciones: RemoteOK y Remotive piden enlazar a la oferta original (el botón «Ver oferta» lo hace) y Remotive publica con ~24 h de retraso.
 Diagnóstico: `node probe.mjs "puesto" "ciudad"` guarda el HTML real de LinkedIn/Indeed/Computrabajo en `server/debug/`.
+
+## Sincronización entre dispositivos (PostgreSQL)
+
+El navegador sigue guardando una copia en `localStorage`; el servidor guarda la copia compartida y cada dispositivo la mantiene al día.
+
+**Variables de entorno**
+- `ACCESS_KEY`: clave de acceso (obligatoria si el servidor es accesible desde internet).
+- `DATABASE_URL`: URL de PostgreSQL. Sin ella, los datos se guardan en `server/data/state.json` (útil en local).
+
+**En local:** `ACCESS_KEY=mi-clave DATABASE_URL=postgres://… npm start` y abre `http://127.0.0.1:3001`.
+
+**En Render:** sube el repositorio completo, crea un *Web Service* (o usa `render.yaml`), define `ACCESS_KEY` y `DATABASE_URL` y abre la URL `https://…onrender.com` en tu PC y en el teléfono. La primera vez pedirá la clave y cargará tus datos.
+
+**Notas**
+- La API: `GET /api/state`, `PUT /api/state` (control de versiones: si dos dispositivos cambian a la vez aparece un aviso para conservar uno o combinar).
+- Se sincronizan CVs, ofertas, envíos, metas y ajustes. No se sincronizan la API key del LLM ni la URL del servidor local del Radar.
+- En Render no hay Chromium: LinkedIn, Indeed y Computrabajo (Playwright) no funcionan allí; las fuentes abiertas sí.
+- Usa siempre HTTPS: los CVs contienen datos personales.

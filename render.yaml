@@ -1,0 +1,14 @@
+# Blueprint de Render: un solo servicio web que sirve JobTrack y la API de sincronización.
+# La base de datos PostgreSQL puede ser la de Render, Neon o Supabase: pega su URL en DATABASE_URL.
+services:
+  - type: web
+    name: jobtrack
+    runtime: node
+    buildCommand: cd server && npm install --omit=optional
+    startCommand: cd server && npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: ACCESS_KEY      # clave que escribirás en cada dispositivo (usa una larga)
+        sync: false
+      - key: DATABASE_URL    # postgres://usuario:clave@host:5432/base
+        sync: false

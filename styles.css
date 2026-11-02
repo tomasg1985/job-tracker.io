@@ -678,3 +678,22 @@ label{font-weight:600;color:var(--text-2);font-size:var(--fs-sm)}
 .bullet-sug:empty{display:none}
 .sug-chip{border:1px dashed var(--primary);background:var(--primary-50);color:var(--primary);border-radius:var(--r-pill);padding:3px 10px;font-size:12px;font-weight:600;cursor:pointer}
 .sug-chip:hover{background:var(--primary);color:#fff}
+
+/* sincronización */
+.sync-chip{position:relative;display:inline-grid;place-items:center}
+.sync-chip .sdot{position:absolute;right:6px;top:6px;width:8px;height:8px;border-radius:50%;background:var(--text-3,#9aa);border:2px solid var(--surface,#fff)}
+.sync-chip[data-st="ok"] .sdot{background:#12B76A}.sync-chip[data-st="pending"] .sdot,.sync-chip[data-st="syncing"] .sdot{background:#F79009}
+.sync-chip[data-st="offline"] .sdot,.sync-chip[data-st="error"] .sdot,.sync-chip[data-st="auth"] .sdot,.sync-chip[data-st="conflict"] .sdot{background:#F04438}
+.sync-st{display:flex;align-items:center;gap:var(--s-3);flex-wrap:wrap}
+.sync-st .dot{width:10px;height:10px;border-radius:50%;background:#9aa}
+.sync-st[data-st="ok"] .dot{background:#12B76A}.sync-st[data-st="pending"] .dot,.sync-st[data-st="syncing"] .dot{background:#F79009}
+.sync-st[data-st="offline"] .dot,.sync-st[data-st="error"] .dot,.sync-st[data-st="auth"] .dot,.sync-st[data-st="conflict"] .dot{background:#F04438}
+.sync-chip[hidden]{display:none}
+
+/* simulador de entrevista */
+.int-q{font-size:var(--fs-lg,20px);font-weight:600;line-height:1.45;margin:var(--s-5) 0;font-family:var(--font-head,inherit)}
+.int-timer{font-variant-numeric:tabular-nums;font-weight:700;padding:4px 12px;border-radius:var(--r-pill);background:var(--primary-50);color:var(--primary)}
+.int-timer.warn{background:#FEF0C7;color:#B54708}
+.int-prog{height:6px;border-radius:var(--r-pill);background:var(--line);overflow:hidden}.int-prog i{display:block;height:100%;background:var(--primary)}
+.int-h{display:flex;justify-content:space-between;align-items:center;gap:var(--s-3);padding:var(--s-3) 0;border-top:1px solid var(--line)}
+.int-card textarea{width:100%}
